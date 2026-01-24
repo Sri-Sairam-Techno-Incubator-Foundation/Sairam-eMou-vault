@@ -95,8 +95,62 @@ export default function Dashboard() {
 
   const topDepartments = departmentStats.slice(0, 10);
 
-  const getMonthlyTrends = () => {
-    const months = [];
+  const getYearlyTrends = () => {
+    const yearData: {
+      [key: string]: {
+        count: number;
+        active: number;
+        expired: number;
+        renewal: number;
+        draft: number;
+      };
+    } = {};
+
+    // Initialize years from 2014 to current year
+    const currentYear = new Date().getFullYear();
+    for (let year = 2014; year <= currentYear; year++) {
+      yearData[year] = { count: 0, active: 0, expired: 0, renewal: 0, draft: 0 };
+    }
+
+    // Count records per year based on fromDate (when eMoU started)
+    records.forEach((record) => {
+      if (record.fromDate) {
+        try {
+          // Parse dd.mm.yyyy format
+          const parts = record.fromDate.split('.');
+          if (parts.length === 3) {
+            const year = parseInt(parts[2]);
+            if (yearData[year] !== undefined) {
+              yearData[year].count++;
+              if (record.status === "Active") yearData[year].active++;
+              else if (record.status === "Expired") yearData[year].expired++;
+              else if (record.status === "Renewal Pending") yearData[year].renewal++;
+              else if (record.status === "Draft") yearData[year].draft++;
+            }
+          }
+        } catch (e) {
+          // Skip invalid dates
+        }
+      }
+    });
+
+    const years = [];
+    for (let year = 2014; year <= currentYear; year++) {
+      years.push({
+        year: year.toString(),
+        count: yearData[year].count,
+        active: yearData[year].active,
+        expired: yearData[year].expired,
+        renewal: yearData[year].renewal,
+        draft: yearData[year].draft,
+      });
+    }
+
+    return years;
+  };
+
+  const getCurrentYearMonthly = () => {
+    const currentYear = new Date().getFullYear();
     const monthData: {
       [key: string]: {
         count: number;
@@ -106,40 +160,35 @@ export default function Dashboard() {
       };
     } = {};
 
-    // Get last 12 months
-    for (let i = 11; i >= 0; i--) {
-      const date = new Date();
-      date.setMonth(date.getMonth() - i);
-      const monthKey = date.toLocaleString("default", { month: "short" });
-      months.push(monthKey);
-      monthData[monthKey] = { count: 0, active: 0, expired: 0, renewal: 0 };
-    }
+    // Initialize all 12 months
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    months.forEach(month => {
+      monthData[month] = { count: 0, active: 0, expired: 0, renewal: 0 };
+    });
 
-    // Count records per month with status breakdown
+    // Count records for current year based on fromDate
     records.forEach((record) => {
-      if (record.createdAt) {
-        let createdDate: Date;
-        if (record.createdAt instanceof Date) {
-          createdDate = record.createdAt;
-        } else if (
-          typeof record.createdAt === "object" &&
-          "seconds" in record.createdAt
-        ) {
-          createdDate = new Date(
-            (record.createdAt as { seconds: number }).seconds * 1000,
-          );
-        } else {
-          return; // Skip invalid dates
-        }
-        const monthKey = createdDate.toLocaleString("default", {
-          month: "short",
-        });
-        if (monthData[monthKey] !== undefined) {
-          monthData[monthKey].count++;
-          if (record.status === "Active") monthData[monthKey].active++;
-          else if (record.status === "Expired") monthData[monthKey].expired++;
-          else if (record.status === "Renewal Pending")
-            monthData[monthKey].renewal++;
+      if (record.fromDate) {
+        try {
+          // Parse dd.mm.yyyy format
+          const parts = record.fromDate.split('.');
+          if (parts.length === 3) {
+            const day = parseInt(parts[0]);
+            const month = parseInt(parts[1]) - 1; // JavaScript months are 0-indexed
+            const year = parseInt(parts[2]);
+            
+            if (year === currentYear) {
+              const monthKey = months[month];
+              if (monthKey && monthData[monthKey]) {
+                monthData[monthKey].count++;
+                if (record.status === "Active") monthData[monthKey].active++;
+                else if (record.status === "Expired") monthData[monthKey].expired++;
+                else if (record.status === "Renewal Pending") monthData[monthKey].renewal++;
+              }
+            }
+          }
+        } catch (e) {
+          // Skip invalid dates
         }
       }
     });
@@ -153,7 +202,8 @@ export default function Dashboard() {
     }));
   };
 
-  const monthlyTrends = getMonthlyTrends();
+  const yearlyTrends = getYearlyTrends();
+  const currentYearMonthly = getCurrentYearMonthly();
 
   // Status distribution for pie chart
   const statusData = [
@@ -414,18 +464,18 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Row 2: Multi-Line Chart + Pie Chart + Radar */}
+          {/* Row 2: Yearly Trends + Pie Chart + Radar */}
           <div className="grid grid-cols-12 gap-3">
-            {/* Multi-Line Trend Chart */}
+            {/* Yearly Historical Trend Chart */}
             <div className="col-span-5 bg-white rounded-lg p-3 border border-gray-200">
               <h3 className="text-xs font-bold text-gray-700 mb-2 uppercase">
-                12-Month Trend Analysis
+                Yearly Trends (2014-2026)
               </h3>
               <ResponsiveContainer width="100%" height={200}>
-                <LineChart data={monthlyTrends}>
+                <LineChart data={yearlyTrends}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                   <XAxis
-                    dataKey="month"
+                    dataKey="year"
                     tick={{ fontSize: 10 }}
                     stroke="#6b7280"
                   />
@@ -439,7 +489,7 @@ export default function Dashboard() {
                     dataKey="count"
                     stroke="#3b82f6"
                     strokeWidth={2}
-                    dot={{ r: 3 }}
+                    dot={{ r: 4 }}
                     name="Total"
                   />
                   <Line
@@ -447,7 +497,7 @@ export default function Dashboard() {
                     dataKey="active"
                     stroke="#10b981"
                     strokeWidth={2}
-                    dot={{ r: 3 }}
+                    dot={{ r: 4 }}
                     name="Active"
                   />
                   <Line
@@ -455,7 +505,7 @@ export default function Dashboard() {
                     dataKey="expired"
                     stroke="#ef4444"
                     strokeWidth={2}
-                    dot={{ r: 3 }}
+                    dot={{ r: 4 }}
                     name="Expired"
                   />
                 </LineChart>
@@ -525,15 +575,68 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Row 3: Area Chart + Composed Bar Chart */}
+          {/* Row 3: Yearly Bar Chart + Current Year Monthly */}
           <div className="grid grid-cols-12 gap-3">
-            {/* Area Chart - Cumulative Growth */}
+            {/* Yearly Stacked Bar Chart */}
             <div className="col-span-6 bg-white rounded-lg p-3 border border-gray-200">
               <h3 className="text-xs font-bold text-gray-700 mb-2 uppercase">
-                Monthly Breakdown (Area)
+                Yearly Status Distribution (2014-2026)
               </h3>
               <ResponsiveContainer width="100%" height={180}>
-                <AreaChart data={monthlyTrends}>
+                <ComposedChart data={yearlyTrends}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis
+                    dataKey="year"
+                    tick={{ fontSize: 10 }}
+                    stroke="#6b7280"
+                  />
+                  <YAxis tick={{ fontSize: 10 }} stroke="#6b7280" />
+                  <Tooltip
+                    contentStyle={{ fontSize: "12px", borderRadius: "8px" }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: "10px" }} />
+                  <Bar
+                    dataKey="active"
+                    stackId="a"
+                    fill="#10b981"
+                    name="Active"
+                  />
+                  <Bar
+                    dataKey="renewal"
+                    stackId="a"
+                    fill="#f59e0b"
+                    name="Renewal"
+                  />
+                  <Bar
+                    dataKey="expired"
+                    stackId="a"
+                    fill="#ef4444"
+                    name="Expired"
+                  />
+                  <Bar
+                    dataKey="draft"
+                    stackId="a"
+                    fill="#6b7280"
+                    name="Draft"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="count"
+                    stroke="#3b82f6"
+                    strokeWidth={2}
+                    name="Total"
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Current Year Monthly Area Chart */}
+            <div className="col-span-6 bg-white rounded-lg p-3 border border-gray-200">
+              <h3 className="text-xs font-bold text-gray-700 mb-2 uppercase">
+                2026 Monthly Activity
+              </h3>
+              <ResponsiveContainer width="100%" height={180}>
+                <AreaChart data={currentYearMonthly}>
                   <defs>
                     <linearGradient
                       id="colorActive"
@@ -591,54 +694,15 @@ export default function Dashboard() {
                     fill="url(#colorExpired)"
                     name="Expired"
                   />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-
-            {/* Stacked Bar Chart */}
-            <div className="col-span-6 bg-white rounded-lg p-3 border border-gray-200">
-              <h3 className="text-xs font-bold text-gray-700 mb-2 uppercase">
-                Monthly Status Composition
-              </h3>
-              <ResponsiveContainer width="100%" height={180}>
-                <ComposedChart data={monthlyTrends}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis
-                    dataKey="month"
-                    tick={{ fontSize: 10 }}
-                    stroke="#6b7280"
-                  />
-                  <YAxis tick={{ fontSize: 10 }} stroke="#6b7280" />
-                  <Tooltip
-                    contentStyle={{ fontSize: "12px", borderRadius: "8px" }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: "10px" }} />
-                  <Bar
-                    dataKey="active"
-                    stackId="a"
-                    fill="#10b981"
-                    name="Active"
-                  />
-                  <Bar
-                    dataKey="renewal"
-                    stackId="a"
-                    fill="#f59e0b"
-                    name="Renewal"
-                  />
-                  <Bar
-                    dataKey="expired"
-                    stackId="a"
-                    fill="#ef4444"
-                    name="Expired"
-                  />
-                  <Line
+                  <Area
                     type="monotone"
                     dataKey="count"
                     stroke="#3b82f6"
-                    strokeWidth={2}
+                    fillOpacity={0.2}
+                    fill="#3b82f6"
                     name="Total"
                   />
-                </ComposedChart>
+                </AreaChart>
               </ResponsiveContainer>
             </div>
           </div>
