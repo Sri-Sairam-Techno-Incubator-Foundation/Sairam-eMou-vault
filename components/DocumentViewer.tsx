@@ -10,36 +10,62 @@ interface DocumentViewerProps {
 
 export default function DocumentViewer({ url, title, onClose }: DocumentViewerProps) {
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   
-  const isPDF = url.toLowerCase().includes('.pdf') || url.includes('pdf');
-  const isImage = /\.(jpg|jpeg|png|gif|webp)/i.test(url);
+  // For Cloudinary URLs, just use the clean URL without any flags
+  // The absence of fl_attachment allows inline viewing
+  let viewableUrl = url;
+  if (url.includes('cloudinary.com')) {
+    // Remove any fl_attachment flags that force downloads
+    viewableUrl = url.replace(/\/fl_attachment[^/]*\//g, '/').replace(/\/\//g, '/');
+  }
+  
+  const isPDF = viewableUrl.toLowerCase().includes('.pdf') || viewableUrl.includes('pdf');
+  const isImage = /\.(jpg|jpeg|png|gif|webp)/i.test(viewableUrl);
+  
+  // Use Google Docs Viewer as fallback for PDFs with authentication issues
+  const googleViewerUrl = isPDF ? `https://docs.google.com/viewer?url=${encodeURIComponent(viewableUrl)}&embedded=true` : null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-lg shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col animate-scale-in overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900 truncate">{title}</h3>
-          <div className="flex items-center gap-2">
+        <div className="bg-gray-900 px-6 py-4 flex items-center justify-between flex-shrink-0">
+          <div className="text-white flex-1 mr-4">
+            <h2 className="text-lg font-semibold truncate">{title}</h2>
+            <p className="text-sm text-gray-400 mt-0.5">Document Viewer</p>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
             <a
-              href={url}
+              href={viewableUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="btn btn-secondary text-sm"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-300 hover:text-white hover:bg-gray-800 rounded transition-colors"
             >
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z" />
+                <path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z" />
+              </svg>
               Open in New Tab
             </a>
             <button
               onClick={onClose}
-              className="btn btn-secondary text-sm"
+              className="text-gray-400 hover:text-white transition-colors p-1 hover:bg-gray-800 rounded"
+              aria-label="Close"
             >
-              ✕ Close
+              <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                <path
+                  fillRule="evenodd"
+                  d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                  clipRule="evenodd"
+                />
+              </svg>
             </button>
           </div>
         </div>
 
         {/* Document Viewer */}
-        <div className="flex-1 overflow-hidden relative bg-gray-100">
+        <div className="flex-1 overflow-hidden relative bg-gray-50">
           {loading && (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="text-center">
@@ -50,19 +76,43 @@ export default function DocumentViewer({ url, title, onClose }: DocumentViewerPr
           )}
           
           {isPDF ? (
-            <iframe
-              src={`${url}#view=FitH`}
-              className="w-full h-full border-0"
-              title={title}
-              onLoad={() => setLoading(false)}
-            />
+            <>
+              {!error ? (
+                <iframe
+                  src={viewableUrl}
+                  className="w-full h-full border-0"
+                  title={title}
+                  onLoad={() => setLoading(false)}
+                  onError={() => {
+                    console.error('Failed to load PDF directly, trying Google Viewer:', viewableUrl);
+                    setError(true);
+                    setLoading(false);
+                  }}
+                />
+              ) : (
+                <iframe
+                  src={googleViewerUrl!}
+                  className="w-full h-full border-0"
+                  title={title}
+                  onLoad={() => setLoading(false)}
+                  onError={() => {
+                    setLoading(false);
+                    console.error('Failed to load PDF with Google Viewer:', viewableUrl);
+                  }}
+                />
+              )}
+            </>
           ) : isImage ? (
             <div className="w-full h-full flex items-center justify-center p-4 overflow-auto">
               <img
-                src={url}
+                src={viewableUrl}
                 alt={title}
                 className="max-w-full max-h-full object-contain"
                 onLoad={() => setLoading(false)}
+                onError={() => {
+                  setLoading(false);
+                  console.error('Failed to load image:', viewableUrl);
+                }}
               />
             </div>
           ) : (
@@ -75,7 +125,7 @@ export default function DocumentViewer({ url, title, onClose }: DocumentViewerPr
                 This file type cannot be previewed in the browser. Please use the button above to open it in a new tab or download it.
               </p>
               <a
-                href={url}
+                href={viewableUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="btn btn-primary"

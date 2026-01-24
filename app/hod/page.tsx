@@ -54,29 +54,23 @@ function HODPage() {
   };
 
   const uploadToCloudinary = async (file: File): Promise<string> => {
-    const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 'demo';
-    const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'ml_default';
-    
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('upload_preset', uploadPreset);
-    formData.append('folder', 'emou-documents');
 
     try {
-      const response = await fetch(
-        `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`,
-        {
-          method: 'POST',
-          body: formData,
-        }
-      );
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
       
       if (!response.ok) {
-        throw new Error('Upload failed');
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Upload failed:', errorData);
+        throw new Error(errorData.error || 'Upload failed');
       }
       
       const data = await response.json();
-      return data.secure_url;
+      return data.url;
     } catch (error) {
       console.error('Upload failed:', error);
       throw error;

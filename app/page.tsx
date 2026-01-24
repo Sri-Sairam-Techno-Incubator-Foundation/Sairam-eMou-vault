@@ -611,6 +611,22 @@ function HomePage() {
                     Admin
                   </button>
                 )}
+                {user?.role === "master" && (
+                  <button
+                    onClick={() => router.push("/admin")}
+                    className="btn btn-secondary"
+                  >
+                    Approvals
+                  </button>
+                )}
+                {user?.role === "hod" && (
+                  <button
+                    onClick={() => router.push("/hod")}
+                    className="btn btn-secondary"
+                  >
+                    HOD Dashboard
+                  </button>
+                )}
                 <button onClick={handleExport} className="btn btn-secondary">
                   Export
                 </button>

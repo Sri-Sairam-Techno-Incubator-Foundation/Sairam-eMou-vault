@@ -18,7 +18,9 @@ function AdminPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [pendingRecords, setPendingRecords] = useState<EMoURecord[]>([]);
   const [draftRecords, setDraftRecords] = useState<EMoURecord[]>([]);
-  const [activeTab, setActiveTab] = useState<'users' | 'pending' | 'drafts'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'pending' | 'drafts'>(
+    currentUser?.role === 'master' ? 'pending' : 'users'
+  );
   const [viewingDocument, setViewingDocument] = useState<{ url: string; title: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -40,7 +42,8 @@ function AdminPage() {
   } | null>(null);
 
   useEffect(() => {
-    if (!isAdmin()) {
+    // Allow both admin and master roles
+    if (currentUser?.role !== 'admin' && currentUser?.role !== 'master') {
       router.push("/");
     } else {
       loadUsers();
@@ -298,10 +301,12 @@ function AdminPage() {
             <div className="flex items-center justify-between">
               <div>
                 <h1 className="text-lg font-semibold text-[#1f2937]">
-                  Admin Dashboard
+                  {currentUser?.role === 'master' ? 'Master Approval Dashboard' : 'Admin Dashboard'}
                 </h1>
                 <p className="text-xs text-[#6b7280]">
-                  User Management & System Administration
+                  {currentUser?.role === 'master' 
+                    ? 'Review and approve eMoU records' 
+                    : 'User Management & System Administration'}
                 </p>
               </div>
               <div className="flex gap-2">
@@ -326,16 +331,18 @@ function AdminPage() {
           {/* Tab Navigation */}
           <div className="bg-white rounded-lg border border-[#d1d5db] mb-6">
             <div className="flex border-b border-[#d1d5db]">
-              <button
-                onClick={() => setActiveTab('users')}
-                className={`px-6 py-3 text-sm font-medium ${
-                  activeTab === 'users'
-                    ? 'text-blue-600 border-b-2 border-blue-600'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                User Management
-              </button>
+              {currentUser?.role === 'admin' && (
+                <button
+                  onClick={() => setActiveTab('users')}
+                  className={`px-6 py-3 text-sm font-medium ${
+                    activeTab === 'users'
+                      ? 'text-blue-600 border-b-2 border-blue-600'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  User Management
+                </button>
+              )}
               <button
                 onClick={() => setActiveTab('pending')}
                 className={`px-6 py-3 text-sm font-medium ${
@@ -369,8 +376,8 @@ function AdminPage() {
             </div>
           </div>
 
-          {/* User Management Tab */}
-          {activeTab === 'users' && (
+          {/* User Management Tab - Admin Only */}
+          {activeTab === 'users' && currentUser?.role === 'admin' && (
             <>
 
           {/* New User Form */}
