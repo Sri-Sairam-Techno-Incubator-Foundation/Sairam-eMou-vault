@@ -12,6 +12,7 @@
     "deploy:hosting": "firebase deploy --only hosting"
   },
   "dependencies": {
+    "cloudinary-core": "^2.14.0",
     "firebase": "^12.8.0",
     "next": "16.1.4",
     "react": "19.2.3",

@@ -20,10 +20,40 @@ const EMOU_COLLECTION = 'emous';
 const USERS_COLLECTION = 'users';
 const COUNTERS_COLLECTION = 'counters';
 
+// Get short department code for ID generation (2 characters)
+function getShortDeptCode(department: DepartmentCode): string {
+  const deptCodeMap: Record<DepartmentCode, string> = {
+    'CSE': 'CS',
+    'ECE': 'EC',
+    'MECH': 'ME',
+    'CIVIL': 'CI',
+    'EEE': 'EE',
+    'IT': 'IT',
+    'AIDS': 'AI',
+    'CSBS': 'CB',
+  };
+  return deptCodeMap[department] || department.slice(0, 2);
+}
+
 // Generate unique eMoU ID: YY + DEPARTMENT_CODE + SEQUENTIAL_NUMBER
-export async function generateEMoUId(department: DepartmentCode): Promise<string> {
-  const year = new Date().getFullYear().toString().slice(-2);
-  const counterId = `${year}_${department}`;
+// If fromDate is provided, uses year from fromDate, otherwise uses current year
+export async function generateEMoUId(department: DepartmentCode, fromDate?: string): Promise<string> {
+  let year: string;
+  
+  // Extract year from fromDate if provided (format: dd.mm.yyyy)
+  if (fromDate && fromDate !== "Perpetual") {
+    const parts = fromDate.split('.');
+    if (parts.length === 3) {
+      year = parts[2].slice(-2); // Last 2 digits of year
+    } else {
+      year = new Date().getFullYear().toString().slice(-2);
+    }
+  } else {
+    year = new Date().getFullYear().toString().slice(-2);
+  }
+  
+  const deptCode = getShortDeptCode(department);
+  const counterId = `${year}_${deptCode}`;
   const counterRef = doc(db, COUNTERS_COLLECTION, counterId);
   
   const counterDoc = await getDoc(counterRef);
@@ -33,15 +63,15 @@ export async function generateEMoUId(department: DepartmentCode): Promise<string
     nextNumber = (counterDoc.data().count || 0) + 1;
   }
   
-  await setDoc(counterRef, { count: nextNumber, year, department });
+  await setDoc(counterRef, { count: nextNumber, year, department: deptCode });
   
   const sequentialNumber = nextNumber.toString().padStart(3, '0');
-  return `${year}${department}${sequentialNumber}`;
+  return `${year}${deptCode}${sequentialNumber}`;
 }
 
 // eMoU CRUD Operations
 export async function createEMoU(data: Omit<EMoURecord, 'id'>): Promise<string> {
-  const id = await generateEMoUId(data.department);
+  const id = await generateEMoUId(data.department, data.fromDate);
   const emouData = {
     ...data,
     id,

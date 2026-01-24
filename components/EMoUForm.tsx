@@ -6,6 +6,8 @@ import {
   DepartmentCode,
   EMoUStatus,
   DocumentAvailability,
+  ScopeType,
+  MaintainedBy,
 } from "@/types";
 import { useAuth } from "@/context/AuthContext";
 
@@ -39,6 +41,9 @@ export default function EMoUForm({
 }: EMoUFormProps) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [uploadingHOD, setUploadingHOD] = useState(false);
+  const [uploadingAgreement, setUploadingAgreement] = useState(false);
+  const [showAlert, setShowAlert] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
   const [formData, setFormData] = useState({
     department:
       initialData?.department || (user?.department as DepartmentCode) || "CSE",
@@ -46,8 +51,13 @@ export default function EMoUForm({
     fromDate: initialData?.fromDate || "",
     toDate: initialData?.toDate || "",
     status: initialData?.status || "Draft",
+    scope: initialData?.scope || "National" as ScopeType,
+    maintainedBy: initialData?.maintainedBy || "Departments" as MaintainedBy,
+    approvalStatus: initialData?.approvalStatus || "draft" as const,
     scannedCopy: initialData?.scannedCopy || "",
     documentAvailability: initialData?.documentAvailability || "Not Available",
+    hodApprovalDoc: initialData?.hodApprovalDoc || "",
+    signedAgreementDoc: initialData?.signedAgreementDoc || "",
     description: initialData?.description || "",
     companyWebsite: initialData?.companyWebsite || "",
     aboutCompany: initialData?.aboutCompany || "",
@@ -69,21 +79,132 @@ export default function EMoUForm({
     companyRelationship: initialData?.companyRelationship || 3,
   });
 
+  const uploadToCloudinary = async (file: File): Promise<string> => {
+    const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 'demo';
+    const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'ml_default';
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', uploadPreset);
+    formData.append('folder', 'emou-documents');
+
+    try {
+      const response = await fetch(
+        `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`,
+        {
+          method: 'POST',
+          body: formData,
+        }
+      );
+      
+      if (!response.ok) {
+        throw new Error('Upload failed');
+      }
+      
+      const data = await response.json();
+      return data.secure_url;
+    } catch (error) {
+      console.error('Upload failed:', error);
+      throw error;
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, fieldName: 'hodApprovalDoc' | 'signedAgreementDoc') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
+    if (!allowedTypes.includes(file.type)) {
+      alert('Please upload only PDF or image files');
+      return;
+    }
+
+    // Validate file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      alert('File size should not exceed 10MB');
+      return;
+    }
+
+    if (fieldName === 'hodApprovalDoc') setUploadingHOD(true);
+    if (fieldName === 'signedAgreementDoc') setUploadingAgreement(true);
+
+    try {
+      const url = await uploadToCloudinary(file);
+      setFormData({ ...formData, [fieldName]: url });
+      setShowAlert({ message: 'File uploaded successfully!', type: 'success' });
+      
+      // Check if both documents are now uploaded, move to pending
+      const updatedFormData = { ...formData, [fieldName]: url };
+      if (updatedFormData.hodApprovalDoc && updatedFormData.signedAgreementDoc) {
+        setFormData({ ...updatedFormData, approvalStatus: 'pending' });
+        setShowAlert({ 
+          message: 'Both documents uploaded! Your eMoU will be submitted for admin approval.', 
+          type: 'info' 
+        });
+      } else {
+        setFormData(updatedFormData);
+      }
+    } catch (error) {
+      setShowAlert({ message: 'Failed to upload file. Please try again.', type: 'error' });
+    } finally {
+      if (fieldName === 'hodApprovalDoc') setUploadingHOD(false);
+      if (fieldName === 'signedAgreementDoc') setUploadingAgreement(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      await onSubmit(formData as Partial<EMoURecord>);
+      // Determine approval status based on documents
+      let approvalStatus: 'draft' | 'pending' | 'approved' | 'rejected' = 'draft';
+      
+      if (formData.hodApprovalDoc && formData.signedAgreementDoc) {
+        approvalStatus = 'pending';
+        setShowAlert({ 
+          message: 'Record submitted for admin approval. You will be notified once approved.', 
+          type: 'info' 
+        });
+      } else {
+        setShowAlert({ 
+          message: 'Record saved as draft. Upload both documents to submit for approval.', 
+          type: 'warning' 
+        });
+      }
+
+      await onSubmit({ ...formData, approvalStatus } as Partial<EMoURecord>);
     } catch {
-      alert("Failed to save record");
+      setShowAlert({ message: 'Failed to save record', type: 'error' });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <>
+      {showAlert && (
+        <div className="fixed top-4 right-4 z-50">
+          <div className={`${
+            showAlert.type === 'success' ? 'bg-green-50 border-green-500 text-green-800' :
+            showAlert.type === 'error' ? 'bg-red-50 border-red-500 text-red-800' :
+            showAlert.type === 'warning' ? 'bg-orange-50 border-orange-500 text-orange-800' :
+            'bg-blue-50 border-blue-500 text-blue-800'
+          } border-l-4 p-4 rounded shadow-lg max-w-md`}>
+            <div className="flex items-start">
+              <p className="text-sm">{showAlert.message}</p>
+              <button
+                onClick={() => setShowAlert(null)}
+                className="ml-4 text-gray-500 hover:text-gray-700"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      <form onSubmit={handleSubmit} className="space-y-6">
       {/* Basic Information */}
       <div className="bg-white p-6 rounded-lg border border-[#d1d5db]">
         <h3 className="text-sm font-semibold text-[#1f2937] mb-4 uppercase tracking-wide">
@@ -154,6 +275,45 @@ export default function EMoUForm({
                   {status}
                 </option>
               ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-[#4b5563] mb-1">
+              Scope <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={formData.scope}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  scope: e.target.value as ScopeType,
+                })
+              }
+              required
+              className="w-full"
+            >
+              <option value="National">National</option>
+              <option value="International">International</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-[#4b5563] mb-1">
+              Maintained By <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={formData.maintainedBy}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  maintainedBy: e.target.value as MaintainedBy,
+                })
+              }
+              required
+              className="w-full"
+            >
+              <option value="Institution">Institution</option>
+              <option value="Incubation">Incubation</option>
+              <option value="Departments">Departments</option>
             </select>
           </div>
         </div>
@@ -589,32 +749,71 @@ export default function EMoUForm({
           </div>
           <div className="col-span-2">
             <label className="block text-xs font-medium text-[#4b5563] mb-1">
-              Google Drive Link (Scanned Copy){" "}
-              <span className="text-[#9ca3af] font-normal">(Optional)</span>
+              HOD Approval Document
             </label>
-            <input
-              type="url"
-              value={formData.scannedCopy}
-              onChange={(e) =>
-                setFormData({ ...formData, scannedCopy: e.target.value })
-              }
-              className="w-full"
-              placeholder="https://drive.google.com/file/d/... (optional)"
-            />
-            <p className="text-xs text-[#6b7280] mt-1">
-              Upload document to Google Drive and paste the shareable link here
-              (optional)
-            </p>
-            {formData.scannedCopy && (
-              <a
-                href={formData.scannedCopy}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-blue-600 hover:underline mt-1 inline-block"
-              >
-                View document in Drive
-              </a>
-            )}
+            <div className="space-y-2">
+              <input
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png"
+                onChange={(e) => handleFileUpload(e, 'hodApprovalDoc')}
+                disabled={uploadingHOD}
+                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+              />
+              {uploadingHOD && <p className="text-xs text-blue-600">Uploading...</p>}
+              {formData.hodApprovalDoc && (
+                <div className="flex items-center gap-2">
+                  <a
+                    href={formData.hodApprovalDoc}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-blue-600 hover:underline"
+                  >
+                    View Uploaded Document
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, hodApprovalDoc: '' })}
+                    className="text-xs text-red-600 hover:text-red-800"
+                  >
+                    Remove
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="col-span-2">
+            <label className="block text-xs font-medium text-[#4b5563] mb-1">
+              Signed Agreement Document
+            </label>
+            <div className="space-y-2">
+              <input
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png"
+                onChange={(e) => handleFileUpload(e, 'signedAgreementDoc')}
+                disabled={uploadingAgreement}
+                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+              />
+              {uploadingAgreement && <p className="text-xs text-blue-600">Uploading...</p>}
+              {formData.signedAgreementDoc && (
+                <div className="flex items-center gap-2">
+                  <a
+                    href={formData.signedAgreementDoc}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-blue-600 hover:underline"
+                  >
+                    View Uploaded Document
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, signedAgreementDoc: '' })}
+                    className="text-xs text-red-600 hover:text-red-800"
+                  >
+                    Remove
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -638,5 +837,6 @@ export default function EMoUForm({
         </button>
       </div>
     </form>
+    </>
   );
 }

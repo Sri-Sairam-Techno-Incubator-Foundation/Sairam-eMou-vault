@@ -5,8 +5,9 @@ import { useAuth } from "@/context/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Alert from "@/components/Alert";
 import ConfirmDialog from "@/components/ConfirmDialog";
-import { User, UserRole, DepartmentCode } from "@/types";
-import { getAllUsers, createUser, deleteUser } from "@/lib/firestore";
+import DocumentViewer from "@/components/DocumentViewer";
+import { User, UserRole, DepartmentCode, EMoURecord } from "@/types";
+import { getAllUsers, createUser, deleteUser, getEMoUs, updateEMoU } from "@/lib/firestore";
 import { useRouter } from "next/navigation";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { getSecondaryAuth } from "@/lib/firebase";
@@ -15,6 +16,10 @@ function AdminPage() {
   const { user: currentUser, isAdmin } = useAuth();
   const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
+  const [pendingRecords, setPendingRecords] = useState<EMoURecord[]>([]);
+  const [draftRecords, setDraftRecords] = useState<EMoURecord[]>([]);
+  const [activeTab, setActiveTab] = useState<'users' | 'pending' | 'drafts'>('users');
+  const [viewingDocument, setViewingDocument] = useState<{ url: string; title: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({
@@ -39,6 +44,7 @@ function AdminPage() {
       router.push("/");
     } else {
       loadUsers();
+      loadApprovalRecords();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -53,6 +59,45 @@ function AdminPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadApprovalRecords = async () => {
+    try {
+      const allRecords = await getEMoUs();
+      setPendingRecords(allRecords.filter(r => r.approvalStatus === 'pending'));
+      setDraftRecords(allRecords.filter(r => r.approvalStatus === 'draft'));
+    } catch (error) {
+      console.error("Failed to load approval records:", error);
+    }
+  };
+
+  const handleApproveRecord = async (recordId: string) => {
+    try {
+      await updateEMoU(recordId, { approvalStatus: 'approved' });
+      setAlert({ message: "Record approved successfully!", type: "success" });
+      await loadApprovalRecords();
+    } catch (error) {
+      console.error("Failed to approve record:", error);
+      setAlert({ message: "Failed to approve record", type: "error" });
+    }
+  };
+
+  const handleRejectRecord = async (recordId: string) => {
+    setConfirmDialog({
+      title: "Reject Record",
+      message: "Are you sure you want to reject this record?",
+      onConfirm: async () => {
+        try {
+          await updateEMoU(recordId, { approvalStatus: 'rejected' });
+          setAlert({ message: "Record rejected", type: "info" });
+          await loadApprovalRecords();
+        } catch (error) {
+          console.error("Failed to reject record:", error);
+          setAlert({ message: "Failed to reject record", type: "error" });
+        }
+        setConfirmDialog(null);
+      }
+    });
   };
 
   const parseEmailAndGenerateCredentials = (email: string, role: UserRole) => {
@@ -278,6 +323,56 @@ function AdminPage() {
         </header>
 
         <div className="p-6">
+          {/* Tab Navigation */}
+          <div className="bg-white rounded-lg border border-[#d1d5db] mb-6">
+            <div className="flex border-b border-[#d1d5db]">
+              <button
+                onClick={() => setActiveTab('users')}
+                className={`px-6 py-3 text-sm font-medium ${
+                  activeTab === 'users'
+                    ? 'text-blue-600 border-b-2 border-blue-600'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                User Management
+              </button>
+              <button
+                onClick={() => setActiveTab('pending')}
+                className={`px-6 py-3 text-sm font-medium ${
+                  activeTab === 'pending'
+                    ? 'text-blue-600 border-b-2 border-blue-600'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Pending Approvals
+                {pendingRecords.length > 0 && (
+                  <span className="ml-2 bg-orange-100 text-orange-800 text-xs px-2 py-0.5 rounded-full">
+                    {pendingRecords.length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setActiveTab('drafts')}
+                className={`px-6 py-3 text-sm font-medium ${
+                  activeTab === 'drafts'
+                    ? 'text-blue-600 border-b-2 border-blue-600'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Draft Records
+                {draftRecords.length > 0 && (
+                  <span className="ml-2 bg-gray-100 text-gray-800 text-xs px-2 py-0.5 rounded-full">
+                    {draftRecords.length}
+                  </span>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* User Management Tab */}
+          {activeTab === 'users' && (
+            <>
+
           {/* New User Form */}
           {showForm && (
             <div className="bg-white p-6 rounded-lg border border-[#d1d5db] mb-6">
@@ -479,7 +574,186 @@ function AdminPage() {
               <div className="text-xs text-[#6b7280] mt-1">HOD Users</div>
             </div>
           </div>
+            </>
+          )}
+
+          {/* Pending Approvals Tab */}
+          {activeTab === 'pending' && (
+            <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+              <div className="p-4 border-b border-[#d1d5db]">
+                <h3 className="text-sm font-semibold text-[#1f2937] uppercase tracking-wide">
+                  Pending Approvals ({pendingRecords.length})
+                </h3>
+                <p className="text-xs text-[#6b7280] mt-1">
+                  Review and approve records with uploaded documents
+                </p>
+              </div>
+              {pendingRecords.length === 0 ? (
+                <div className="p-8 text-center text-gray-500">
+                  No pending approvals
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="sheet-table">
+                    <thead>
+                      <tr>
+                        <th style={{ width: "100px" }}>ID</th>
+                        <th style={{ width: "200px" }}>Company Name</th>
+                        <th style={{ width: "120px" }}>Department</th>
+                        <th style={{ width: "130px" }}>Maintained By</th>
+                        <th style={{ width: "120px" }}>From Date</th>
+                        <th style={{ width: "150px" }}>HOD Approval</th>
+                        <th style={{ width: "150px" }}>Signed Agreement</th>
+                        <th style={{ width: "200px" }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pendingRecords.map((record) => (
+                        <tr key={record.id}>
+                          <td className="font-mono text-xs">{record.emouId}</td>
+                          <td className="font-medium">{record.companyName}</td>
+                          <td>{record.department}</td>
+                          <td>{record.maintainedBy}</td>
+                          <td className="text-xs">{record.fromDate}</td>
+                          <td>
+                            {record.hodApprovalDoc ? (
+                              <button
+                                onClick={() => setViewingDocument({
+                                  url: record.hodApprovalDoc!,
+                                  title: `HOD Approval - ${record.companyName}`
+                                })}
+                                className="text-xs text-blue-600 hover:text-blue-800 underline"
+                              >
+                                View Document
+                              </button>
+                            ) : (
+                              <span className="text-xs text-gray-400">Not uploaded</span>
+                            )}
+                          </td>
+                          <td>
+                            {record.signedAgreementDoc ? (
+                              <button
+                                onClick={() => setViewingDocument({
+                                  url: record.signedAgreementDoc!,
+                                  title: `Signed Agreement - ${record.companyName}`
+                                })}
+                                className="text-xs text-blue-600 hover:text-blue-800 underline"
+                              >
+                                View Document
+                              </button>
+                            ) : (
+                              <span className="text-xs text-gray-400">Not uploaded</span>
+                            )}
+                          </td>
+                          <td>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleApproveRecord(record.id)}
+                                className="btn btn-sm bg-green-600 hover:bg-green-700 text-white px-3 py-1 text-xs"
+                              >
+                                ✓ Approve
+                              </button>
+                              <button
+                                onClick={() => handleRejectRecord(record.id)}
+                                className="btn btn-sm bg-red-600 hover:bg-red-700 text-white px-3 py-1 text-xs"
+                              >
+                                ✗ Reject
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Draft Records Tab */}
+          {activeTab === 'drafts' && (
+            <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+              <div className="p-4 border-b border-[#d1d5db]">
+                <h3 className="text-sm font-semibold text-[#1f2937] uppercase tracking-wide">
+                  Draft Records ({draftRecords.length})
+                </h3>
+                <p className="text-xs text-[#6b7280] mt-1">
+                  Records without complete document uploads
+                </p>
+              </div>
+              {draftRecords.length === 0 ? (
+                <div className="p-8 text-center text-gray-500">
+                  No draft records
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="sheet-table">
+                    <thead>
+                      <tr>
+                        <th style={{ width: "100px" }}>ID</th>
+                        <th style={{ width: "200px" }}>Company Name</th>
+                        <th style={{ width: "120px" }}>Department</th>
+                        <th style={{ width: "130px" }}>Maintained By</th>
+                        <th style={{ width: "120px" }}>From Date</th>
+                        <th style={{ width: "150px" }}>HOD Approval</th>
+                        <th style={{ width: "150px" }}>Signed Agreement</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {draftRecords.map((record) => (
+                        <tr key={record.id}>
+                          <td className="font-mono text-xs">{record.emouId}</td>
+                          <td className="font-medium">{record.companyName}</td>
+                          <td>{record.department}</td>
+                          <td>{record.maintainedBy}</td>
+                          <td className="text-xs">{record.fromDate}</td>
+                          <td>
+                            {record.hodApprovalDoc ? (
+                              <button
+                                onClick={() => setViewingDocument({
+                                  url: record.hodApprovalDoc!,
+                                  title: `HOD Approval - ${record.companyName}`
+                                })}
+                                className="text-xs text-blue-600 hover:text-blue-800 underline"
+                              >
+                                View Document
+                              </button>
+                            ) : (
+                              <span className="text-xs text-red-500">Missing</span>
+                            )}
+                          </td>
+                          <td>
+                            {record.signedAgreementDoc ? (
+                              <button
+                                onClick={() => setViewingDocument({
+                                  url: record.signedAgreementDoc!,
+                                  title: `Signed Agreement - ${record.companyName}`
+                                })}
+                                className="text-xs text-blue-600 hover:text-blue-800 underline"
+                              >
+                                View Document
+                              </button>
+                            ) : (
+                              <span className="text-xs text-red-500">Missing</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
         </div>
+
+        {viewingDocument && (
+          <DocumentViewer
+            url={viewingDocument.url}
+            title={viewingDocument.title}
+            onClose={() => setViewingDocument(null)}
+          />
+        )}
       </div>
     </ProtectedRoute>
   );

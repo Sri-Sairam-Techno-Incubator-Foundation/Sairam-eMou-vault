@@ -21,6 +21,12 @@ export type EMoUStatus = 'Active' | 'Expired' | 'Renewal Pending' | 'Draft';
 // Document Availability
 export type DocumentAvailability = 'Available' | 'Not Available';
 
+// Scope
+export type ScopeType = 'National' | 'International';
+
+// Maintained By
+export type MaintainedBy = 'Institution' | 'Incubation' | 'Departments';
+
 // eMoU Record interface - matches all fields from README
 export interface EMoURecord {
   id: string; // Format: YY + DEPARTMENT_CODE + SEQUENTIAL_NUMBER (e.g., 26CSE001)
@@ -31,6 +37,11 @@ export interface EMoURecord {
   status: EMoUStatus;
   scannedCopy?: string; // Google Drive link to scanned document
   documentAvailability: DocumentAvailability;
+  scope: ScopeType; // National or International
+  maintainedBy: MaintainedBy; // Institution, Incubation, or Departments
+  approvalStatus: 'draft' | 'pending' | 'approved' | 'rejected'; // Approval workflow status
+  hodApprovalDoc?: string; // Cloudinary link to HOD approval document
+  signedAgreementDoc?: string; // Cloudinary link to signed agreement document
   description: string;
   companyWebsite?: string;
   aboutCompany?: string;
