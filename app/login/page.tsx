@@ -3,12 +3,18 @@
 import { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
+import { auth } from "@/lib/firebase";
+import { sendPasswordResetEmail } from "firebase/auth";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetSuccess, setResetSuccess] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
   const { signIn } = useAuth();
   const router = useRouter();
 
@@ -28,6 +34,28 @@ export default function LoginPage() {
     }
   };
 
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setResetSuccess(false);
+    setResetLoading(true);
+
+    try {
+      await sendPasswordResetEmail(auth, resetEmail);
+      setResetSuccess(true);
+      setTimeout(() => {
+        setShowForgotPassword(false);
+        setResetSuccess(false);
+        setResetEmail("");
+      }, 3000);
+    } catch (err) {
+      const error = err as Error;
+      setError(error.message || "Failed to send reset email");
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#f8f9fa]">
       <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md border border-[#d1d5db]">
@@ -36,7 +64,9 @@ export default function LoginPage() {
             Sairam eMoU Vault
           </h1>
           <p className="text-sm text-[#6b7280] mt-1">
-            Sign in to your account
+            {showForgotPassword
+              ? "Reset your password"
+              : "Sign in to your account"}
           </p>
         </div>
 
@@ -46,51 +76,112 @@ export default function LoginPage() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label
-              htmlFor="email"
-              className="block text-sm font-medium text-[#4b5563] mb-1"
-            >
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="w-full"
-              placeholder="your.email@sairam.edu.in"
-            />
+        {resetSuccess && (
+          <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded mb-4 text-sm">
+            Password reset email sent! Check your inbox.
           </div>
+        )}
 
-          <div>
-            <label
-              htmlFor="password"
-              className="block text-sm font-medium text-[#4b5563] mb-1"
+        {!showForgotPassword ? (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label
+                htmlFor="email"
+                className="block text-sm font-medium text-[#4b5563] mb-1"
+              >
+                Email
+              </label>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                className="w-full"
+                placeholder="your.email@sairam.edu.in"
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label
+                  htmlFor="password"
+                  className="block text-sm font-medium text-[#4b5563]"
+                >
+                  Password
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowForgotPassword(true)}
+                  className="text-xs text-blue-600 hover:text-blue-800"
+                >
+                  Forgot password?
+                </button>
+              </div>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className="w-full"
+                placeholder="••••••••"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="btn btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Password
-            </label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="w-full"
-              placeholder="••••••••"
-            />
-          </div>
+              {loading ? "Signing in..." : "Sign In"}
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={handleForgotPassword} className="space-y-4">
+            <div>
+              <label
+                htmlFor="reset-email"
+                className="block text-sm font-medium text-[#4b5563] mb-1"
+              >
+                Email Address
+              </label>
+              <input
+                id="reset-email"
+                type="email"
+                value={resetEmail}
+                onChange={(e) => setResetEmail(e.target.value)}
+                required
+                className="w-full"
+                placeholder="your.email@sairam.edu.in"
+              />
+              <p className="text-xs text-[#6b7280] mt-1">
+                Enter your email to receive a password reset link
+              </p>
+            </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="btn btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? "Signing in..." : "Sign In"}
-          </button>
-        </form>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowForgotPassword(false);
+                  setResetEmail("");
+                  setError("");
+                }}
+                className="btn btn-secondary flex-1"
+              >
+                Back
+              </button>
+              <button
+                type="submit"
+                disabled={resetLoading}
+                className="btn btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {resetLoading ? "Sending..." : "Send Reset Link"}
+              </button>
+            </div>
+          </form>
+        )}
 
         <div className="mt-6 text-center text-xs text-[#6b7280]">
           <p>Contact your administrator for account access</p>

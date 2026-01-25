@@ -7,19 +7,12 @@ import Alert from "@/components/Alert";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import DocumentViewer from "@/components/DocumentViewer";
 import { User, UserRole, DepartmentCode, EMoURecord } from "@/types";
-import {
-  getAllUsers,
-  createUser,
-  deleteUser,
-  getEMoUs,
-  updateEMoU,
-} from "@/lib/firestore";
+import { getAllUsers, getEMoUs, updateEMoU } from "@/lib/firestore";
 import { useRouter } from "next/navigation";
-import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
-import { getSecondaryAuth } from "@/lib/firebase";
+import { auth } from "@/lib/firebase";
 
 function AdminPage() {
-  const { user: currentUser, isAdmin } = useAuth();
+  const { user: currentUser } = useAuth();
   const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
   const [pendingRecords, setPendingRecords] = useState<EMoURecord[]>([]);
@@ -36,7 +29,6 @@ function AdminPage() {
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({
     email: "",
-    password: "",
     displayName: "",
     role: "hod" as UserRole,
     department: "" as DepartmentCode | "",
@@ -54,6 +46,7 @@ function AdminPage() {
     recordId: string;
     field: "hodApprovalDoc" | "signedAgreementDoc";
   } | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
     // Allow both admin and master roles
@@ -177,9 +170,7 @@ function AdminPage() {
     }
   };
 
-  const parseEmailAndGenerateCredentials = (email: string, role: UserRole) => {
-    const currentYear = new Date().getFullYear();
-
+  const parseEmailAndSetDefaults = (email: string, role: UserRole) => {
     // Check if email matches pattern: hod.dept@sairam.edu.in
     const hodEmailPattern = /^hod\.([a-z]+)@sairam\.edu\.in$/i;
     const hodMatch = email.toLowerCase().match(hodEmailPattern);
@@ -200,112 +191,76 @@ function AdminPage() {
         "CSBS",
       ];
       if (validDepts.includes(deptUpper)) {
-        const generatedPass = `${deptUpper}${currentYear}hod`;
-
         setFormData((prev) => ({
           ...prev,
           displayName: `${deptUpper} HOD`,
-          password: generatedPass,
           department: deptUpper as DepartmentCode,
         }));
-      } else {
-        // Invalid department
-        const randomNum = Math.floor(100 + Math.random() * 900);
-        const generatedPass = `user${currentYear}${randomNum}`;
-        setFormData((prev) => ({
-          ...prev,
-          password: generatedPass,
-        }));
       }
-    } else if (role === "master") {
-      // For master users
-      const randomNum = Math.floor(100 + Math.random() * 900);
-      const generatedPass = `master@${currentYear}${randomNum}`;
-
-      setFormData((prev) => ({
-        ...prev,
-        password: generatedPass,
-      }));
-    } else if (role === "admin") {
-      // For admin users
-      const randomNum = Math.floor(100 + Math.random() * 900);
-      const generatedPass = `admin@${currentYear}${randomNum}`;
-
-      setFormData((prev) => ({
-        ...prev,
-        password: generatedPass,
-      }));
-    } else {
-      // Default password
-      const randomNum = Math.floor(100 + Math.random() * 900);
-      const generatedPass = `user${currentYear}${randomNum}`;
-      setFormData((prev) => ({
-        ...prev,
-        password: generatedPass,
-      }));
     }
   };
 
   const handleEmailChange = (email: string) => {
     setFormData({ ...formData, email });
     if (email.includes("@")) {
-      parseEmailAndGenerateCredentials(email, formData.role);
+      parseEmailAndSetDefaults(email, formData.role);
     }
   };
 
   const handleRoleChange = (role: UserRole) => {
     setFormData({ ...formData, role });
     if (formData.email.includes("@")) {
-      parseEmailAndGenerateCredentials(formData.email, role);
+      parseEmailAndSetDefaults(formData.email, role);
     }
   };
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsCreating(true);
 
     try {
-      // Use secondary auth to create user without signing out admin
-      const secondaryAuth = getSecondaryAuth();
-
-      if (!secondaryAuth) {
-        throw new Error("Failed to initialize secondary authentication");
+      // Get current user's ID token
+      const user = auth.currentUser;
+      if (!user) {
+        throw new Error("Not authenticated");
       }
 
-      // Create Firebase Auth user using secondary app
-      const userCredential = await createUserWithEmailAndPassword(
-        secondaryAuth,
-        formData.email,
-        formData.password,
-      );
+      const idToken = await user.getIdToken();
 
-      await updateProfile(userCredential.user, {
-        displayName: formData.displayName,
+      // Call secure API endpoint with Admin SDK
+      const response = await fetch("/api/admin/create-user", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          email: formData.email,
+          displayName: formData.displayName,
+          role: formData.role,
+          department: formData.department || undefined,
+        }),
       });
 
-      // Create Firestore user document
-      const now = new Date();
-      await createUser(userCredential.user.uid, {
-        email: formData.email,
-        displayName: formData.displayName,
-        role: formData.role,
-        department: formData.department || undefined,
-        createdAt: now,
-        updatedAt: now,
-      });
+      const data = await response.json();
 
-      // Sign out the newly created user from secondary auth
-      await secondaryAuth.signOut();
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to create user");
+      }
 
       setShowForm(false);
       setFormData({
         email: "",
-        password: "",
         displayName: "",
         role: "hod",
         department: "",
       });
-      loadUsers();
-      setAlert({ message: "User created successfully!", type: "success" });
+
+      await loadUsers();
+      setAlert({
+        message: `User created successfully! Welcome email with credentials sent to ${data.email}`,
+        type: "success",
+      });
     } catch (error) {
       const err = error as Error;
       console.error("Failed to create user:", err);
@@ -313,23 +268,59 @@ function AdminPage() {
         message: `Failed to create user: ${err.message}`,
         type: "error",
       });
+    } finally {
+      setIsCreating(false);
     }
   };
 
   const handleDeleteUser = async (uid: string) => {
+    if (!uid) {
+      setAlert({ message: "Error: User ID is missing", type: "error" });
+      return;
+    }
+
     const user = users.find((u) => u.uid === uid);
+
     setConfirmDialog({
       title: "Delete User",
       message: `Are you sure you want to delete user "${user?.displayName || user?.email}"?\n\nThis action cannot be undone.`,
       onConfirm: async () => {
         setConfirmDialog(null);
         try {
-          await deleteUser(uid);
-          loadUsers();
+          // Get current user's ID token
+          const currentAuthUser = auth.currentUser;
+          if (!currentAuthUser) {
+            throw new Error("Not authenticated");
+          }
+
+          const idToken = await currentAuthUser.getIdToken();
+
+          // Call secure API endpoint to delete user
+          const response = await fetch(
+            `/api/admin/delete-user?uid=${encodeURIComponent(uid)}`,
+            {
+              method: "DELETE",
+              headers: {
+                Authorization: `Bearer ${idToken}`,
+              },
+            },
+          );
+
+          const data = await response.json();
+
+          if (!response.ok) {
+            throw new Error(data.error || "Failed to delete user");
+          }
+
+          await loadUsers();
           setAlert({ message: "User deleted successfully!", type: "success" });
         } catch (error) {
-          console.error("Failed to delete user:", error);
-          setAlert({ message: "Failed to delete user", type: "error" });
+          const err = error as Error;
+          console.error("Failed to delete user:", err);
+          setAlert({
+            message: `Failed to delete user: ${err.message}`,
+            type: "error",
+          });
         }
       },
     });
@@ -368,6 +359,7 @@ function AdminPage() {
           onCancel={() => setConfirmDialog(null)}
         />
       )}
+
       <div className="min-h-screen bg-[#f8f9fa]">
         {/* Header */}
         <header className="bg-white border-b border-[#d1d5db] sticky top-0 z-20">
@@ -470,123 +462,221 @@ function AdminPage() {
           {/* User Management Tab - Admin Only */}
           {activeTab === "users" && currentUser?.role === "admin" && (
             <>
-              {/* New User Form */}
+              {/* New User Form - Professional Dialog */}
               {showForm && (
-                <div className="bg-white p-6 rounded-lg border border-[#d1d5db] mb-6">
-                  <h3 className="text-sm font-semibold text-[#1f2937] mb-4 uppercase tracking-wide">
-                    Create New User
-                  </h3>
-                  <form onSubmit={handleCreateUser} className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-xs font-medium text-[#4b5563] mb-1">
-                          Email <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="email"
-                          value={formData.email}
-                          onChange={(e) => handleEmailChange(e.target.value)}
-                          required
-                          className="w-full"
-                          placeholder="hod.cse@sairam.edu.in or user@sairam.edu.in"
-                        />
-                        <p className="text-xs text-[#6b7280] mt-1">
-                          For HOD: use hod.dept@sairam.edu.in (e.g.,
-                          hod.cse@sairam.edu.in)
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                  <div className="bg-white rounded-lg shadow-2xl max-w-2xl w-full overflow-hidden animate-scale-in">
+                    {/* Header */}
+                    <div className="bg-gray-900 px-6 py-4 flex items-center justify-between">
+                      <div className="text-white">
+                        <h2 className="text-lg font-semibold">
+                          Create New User
+                        </h2>
+                        <p className="text-sm text-gray-400 mt-0.5">
+                          Add a new user to the system
                         </p>
                       </div>
-                      <div>
-                        <label className="block text-xs font-medium text-[#4b5563] mb-1">
-                          Password <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={formData.password}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              password: e.target.value,
-                            })
-                          }
-                          required
-                          minLength={6}
-                          className="w-full"
-                          placeholder="Auto-generated based on role"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-[#4b5563] mb-1">
-                          Display Name <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={formData.displayName}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              displayName: e.target.value,
-                            })
-                          }
-                          required
-                          className="w-full"
-                          placeholder="Dr. John Doe or CSE HOD"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-[#4b5563] mb-1">
-                          Role <span className="text-red-500">*</span>
-                        </label>
-                        <select
-                          value={formData.role}
-                          onChange={(e) =>
-                            handleRoleChange(e.target.value as UserRole)
-                          }
-                          required
-                          className="w-full"
+                      <button
+                        onClick={() => setShowForm(false)}
+                        className="text-gray-400 hover:text-white transition-colors p-1 hover:bg-gray-800 rounded"
+                        aria-label="Close"
+                      >
+                        <svg
+                          className="w-6 h-6"
+                          fill="currentColor"
+                          viewBox="0 0 20 20"
                         >
-                          <option value="hod">HOD User</option>
-                          <option value="master">Master User</option>
-                          <option value="admin">Admin</option>
-                        </select>
-                      </div>
-                      {formData.role === "hod" && (
-                        <div>
-                          <label className="block text-xs font-medium text-[#4b5563] mb-1">
-                            Department <span className="text-red-500">*</span>
-                          </label>
-                          <select
-                            value={formData.department}
-                            onChange={(e) =>
-                              setFormData({
-                                ...formData,
-                                department: e.target.value as DepartmentCode,
-                              })
-                            }
-                            required
-                            className="w-full"
-                          >
-                            <option value="">Select Department</option>
-                            <option value="CSE">CSE</option>
-                            <option value="ECE">ECE</option>
-                            <option value="MECH">MECH</option>
-                            <option value="CIVIL">CIVIL</option>
-                            <option value="EEE">EEE</option>
-                            <option value="IT">IT</option>
-                            <option value="AIDS">AIDS</option>
-                            <option value="CSBS">CSBS</option>
-                          </select>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex justify-end">
-                      <button type="submit" className="btn btn-primary">
-                        Create User
+                          <path
+                            fillRule="evenodd"
+                            d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
                       </button>
                     </div>
-                  </form>
+
+                    {/* Content */}
+                    <form onSubmit={handleCreateUser}>
+                      <div className="px-6 py-5 bg-gray-50 space-y-4">
+                        {/* Info Banner */}
+                        <div className="bg-blue-50 border-l-4 border-blue-400 p-3 rounded">
+                          <div className="flex items-start">
+                            <svg
+                              className="w-5 h-5 text-blue-600 mt-0.5 mr-2 flex-shrink-0"
+                              fill="currentColor"
+                              viewBox="0 0 20 20"
+                            >
+                              <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
+                              <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
+                            </svg>
+                            <div>
+                              <p className="text-xs font-medium text-blue-900">
+                                Automated Email Delivery
+                              </p>
+                              <p className="text-xs text-blue-700 mt-0.5">
+                                Welcome email with credentials and verification
+                                link will be sent automatically
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Form Fields */}
+                        <div className="bg-white rounded-lg p-4 border border-gray-200 space-y-3">
+                          <div className="grid grid-cols-2 gap-3">
+                            {/* Email */}
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">
+                                Email Address{" "}
+                                <span className="text-red-500">*</span>
+                              </label>
+                              <input
+                                type="email"
+                                value={formData.email}
+                                onChange={(e) =>
+                                  handleEmailChange(e.target.value)
+                                }
+                                required
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                placeholder="user@sairam.edu.in"
+                                disabled={isCreating}
+                              />
+                            </div>
+
+                            {/* Display Name */}
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">
+                                Display Name{" "}
+                                <span className="text-red-500">*</span>
+                              </label>
+                              <input
+                                type="text"
+                                value={formData.displayName}
+                                onChange={(e) =>
+                                  setFormData({
+                                    ...formData,
+                                    displayName: e.target.value,
+                                  })
+                                }
+                                required
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                placeholder="Dr. John Doe"
+                                disabled={isCreating}
+                              />
+                            </div>
+
+                            {/* Role */}
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">
+                                Role <span className="text-red-500">*</span>
+                              </label>
+                              <select
+                                value={formData.role}
+                                onChange={(e) =>
+                                  handleRoleChange(e.target.value as UserRole)
+                                }
+                                required
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                disabled={isCreating}
+                              >
+                                <option value="hod">HOD User</option>
+                                <option value="master">Master User</option>
+                                <option value="admin">Admin</option>
+                              </select>
+                            </div>
+
+                            {/* Department */}
+                            {formData.role === "hod" && (
+                              <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">
+                                  Department{" "}
+                                  <span className="text-red-500">*</span>
+                                </label>
+                                <select
+                                  value={formData.department}
+                                  onChange={(e) =>
+                                    setFormData({
+                                      ...formData,
+                                      department: e.target
+                                        .value as DepartmentCode,
+                                    })
+                                  }
+                                  required
+                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                  disabled={isCreating}
+                                >
+                                  <option value="">Select Department</option>
+                                  <option value="CSE">CSE</option>
+                                  <option value="ECE">ECE</option>
+                                  <option value="MECH">MECH</option>
+                                  <option value="CIVIL">CIVIL</option>
+                                  <option value="EEE">EEE</option>
+                                  <option value="IT">IT</option>
+                                  <option value="AIDS">AIDS</option>
+                                  <option value="CSBS">CSBS</option>
+                                </select>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Footer */}
+                      <div className="bg-white border-t border-gray-200 px-6 py-3 flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowForm(false)}
+                          className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                          disabled={isCreating}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                          disabled={isCreating}
+                        >
+                          {isCreating ? (
+                            <>
+                              <svg
+                                className="animate-spin h-4 w-4"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                              >
+                                <circle
+                                  className="opacity-25"
+                                  cx="12"
+                                  cy="12"
+                                  r="10"
+                                  stroke="currentColor"
+                                  strokeWidth="4"
+                                />
+                                <path
+                                  className="opacity-75"
+                                  fill="currentColor"
+                                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                />
+                              </svg>
+                              Creating...
+                            </>
+                          ) : (
+                            <>
+                              <svg
+                                className="w-4 h-4"
+                                fill="currentColor"
+                                viewBox="0 0 20 20"
+                              >
+                                <path d="M8 9a3 3 0 100-6 3 3 0 000 6zM8 11a6 6 0 016 6H2a6 6 0 016-6zM16 7a1 1 0 10-2 0v1h-1a1 1 0 100 2h1v1a1 1 0 102 0v-1h1a1 1 0 100-2h-1V7z" />
+                              </svg>
+                              Create User
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
                 </div>
               )}
-
               {/* Users Table */}
               <div className="bg-white rounded-lg shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">

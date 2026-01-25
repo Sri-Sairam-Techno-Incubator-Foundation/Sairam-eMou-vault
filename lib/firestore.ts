@@ -212,6 +212,7 @@ export async function getAllUsers(): Promise<User[]> {
   return querySnapshot.docs.map(doc => {
     const data = doc.data();
     return {
+      uid: doc.id, // Add the document ID as uid
       ...data,
       createdAt: data.createdAt.toDate(),
       updatedAt: data.updatedAt.toDate(),

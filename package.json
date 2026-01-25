@@ -12,10 +12,13 @@
     "deploy:hosting": "firebase deploy --only hosting"
   },
   "dependencies": {
+    "@types/nodemailer": "^7.0.5",
     "cloudinary": "^2.9.0",
     "cloudinary-core": "^2.14.0",
     "firebase": "^12.8.0",
+    "firebase-admin": "^13.6.0",
     "next": "16.1.4",
+    "nodemailer": "^7.0.12",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "recharts": "^3.7.0",
