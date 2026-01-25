@@ -7,7 +7,13 @@ import Alert from "@/components/Alert";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import DocumentViewer from "@/components/DocumentViewer";
 import { User, UserRole, DepartmentCode, EMoURecord } from "@/types";
-import { getAllUsers, createUser, deleteUser, getEMoUs, updateEMoU } from "@/lib/firestore";
+import {
+  getAllUsers,
+  createUser,
+  deleteUser,
+  getEMoUs,
+  updateEMoU,
+} from "@/lib/firestore";
 import { useRouter } from "next/navigation";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { getSecondaryAuth } from "@/lib/firebase";
@@ -18,10 +24,14 @@ function AdminPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [pendingRecords, setPendingRecords] = useState<EMoURecord[]>([]);
   const [draftRecords, setDraftRecords] = useState<EMoURecord[]>([]);
-  const [activeTab, setActiveTab] = useState<'users' | 'pending' | 'drafts'>(
-    currentUser?.role === 'master' ? 'pending' : 'users'
-  );
-  const [viewingDocument, setViewingDocument] = useState<{ url: string; title: string } | null>(null);
+  const [approvedRecords, setApprovedRecords] = useState<EMoURecord[]>([]);
+  const [activeTab, setActiveTab] = useState<
+    "users" | "pending" | "drafts" | "approved"
+  >(currentUser?.role === "master" ? "pending" : "users");
+  const [viewingDocument, setViewingDocument] = useState<{
+    url: string;
+    title: string;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({
@@ -40,10 +50,14 @@ function AdminPage() {
     message: string;
     onConfirm: () => void;
   } | null>(null);
+  const [uploadingDoc, setUploadingDoc] = useState<{
+    recordId: string;
+    field: "hodApprovalDoc" | "signedAgreementDoc";
+  } | null>(null);
 
   useEffect(() => {
     // Allow both admin and master roles
-    if (currentUser?.role !== 'admin' && currentUser?.role !== 'master') {
+    if (currentUser?.role !== "admin" && currentUser?.role !== "master") {
       router.push("/");
     } else {
       loadUsers();
@@ -67,8 +81,13 @@ function AdminPage() {
   const loadApprovalRecords = async () => {
     try {
       const allRecords = await getEMoUs();
-      setPendingRecords(allRecords.filter(r => r.approvalStatus === 'pending'));
-      setDraftRecords(allRecords.filter(r => r.approvalStatus === 'draft'));
+      setPendingRecords(
+        allRecords.filter((r) => r.approvalStatus === "pending"),
+      );
+      setDraftRecords(allRecords.filter((r) => r.approvalStatus === "draft"));
+      setApprovedRecords(
+        allRecords.filter((r) => r.approvalStatus === "approved"),
+      );
     } catch (error) {
       console.error("Failed to load approval records:", error);
     }
@@ -76,7 +95,7 @@ function AdminPage() {
 
   const handleApproveRecord = async (recordId: string) => {
     try {
-      await updateEMoU(recordId, { approvalStatus: 'approved' });
+      await updateEMoU(recordId, { approvalStatus: "approved" });
       setAlert({ message: "Record approved successfully!", type: "success" });
       await loadApprovalRecords();
     } catch (error) {
@@ -91,7 +110,7 @@ function AdminPage() {
       message: "Are you sure you want to reject this record?",
       onConfirm: async () => {
         try {
-          await updateEMoU(recordId, { approvalStatus: 'rejected' });
+          await updateEMoU(recordId, { approvalStatus: "rejected" });
           setAlert({ message: "Record rejected", type: "info" });
           await loadApprovalRecords();
         } catch (error) {
@@ -99,8 +118,63 @@ function AdminPage() {
           setAlert({ message: "Failed to reject record", type: "error" });
         }
         setConfirmDialog(null);
-      }
+      },
     });
+  };
+
+  const handleMoveToPending = async (recordId: string) => {
+    try {
+      await updateEMoU(recordId, { approvalStatus: "pending" });
+      setAlert({
+        message: "Record moved to pending approval!",
+        type: "success",
+      });
+      await loadApprovalRecords();
+    } catch (error) {
+      console.error("Failed to move record:", error);
+      setAlert({ message: "Failed to move record", type: "error" });
+    }
+  };
+
+  const handleFileUpload = async (
+    recordId: string,
+    field: "hodApprovalDoc" | "signedAgreementDoc",
+    file: File,
+  ) => {
+    setUploadingDoc({ recordId, field });
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error("Upload failed");
+      }
+
+      const { url } = await response.json();
+
+      await updateEMoU(recordId, {
+        [field]: url,
+      });
+
+      await loadApprovalRecords();
+      setAlert({
+        message: `Document uploaded successfully!`,
+        type: "success",
+      });
+    } catch (error) {
+      console.error("Failed to upload document:", error);
+      setAlert({
+        message: "Failed to upload document",
+        type: "error",
+      });
+    } finally {
+      setUploadingDoc(null);
+    }
   };
 
   const parseEmailAndGenerateCredentials = (email: string, role: UserRole) => {
@@ -301,12 +375,14 @@ function AdminPage() {
             <div className="flex items-center justify-between">
               <div>
                 <h1 className="text-lg font-semibold text-[#1f2937]">
-                  {currentUser?.role === 'master' ? 'Master Approval Dashboard' : 'Admin Dashboard'}
+                  {currentUser?.role === "master"
+                    ? "Master Approval Dashboard"
+                    : "Admin Dashboard"}
                 </h1>
                 <p className="text-xs text-[#6b7280]">
-                  {currentUser?.role === 'master' 
-                    ? 'Review and approve eMoU records' 
-                    : 'User Management & System Administration'}
+                  {currentUser?.role === "master"
+                    ? "Review and approve eMoU records"
+                    : "User Management & System Administration"}
                 </p>
               </div>
               <div className="flex gap-2">
@@ -331,24 +407,24 @@ function AdminPage() {
           {/* Tab Navigation */}
           <div className="bg-white rounded-lg border border-[#d1d5db] mb-6">
             <div className="flex border-b border-[#d1d5db]">
-              {currentUser?.role === 'admin' && (
+              {currentUser?.role === "admin" && (
                 <button
-                  onClick={() => setActiveTab('users')}
+                  onClick={() => setActiveTab("users")}
                   className={`px-6 py-3 text-sm font-medium ${
-                    activeTab === 'users'
-                      ? 'text-blue-600 border-b-2 border-blue-600'
-                      : 'text-gray-600 hover:text-gray-900'
+                    activeTab === "users"
+                      ? "text-blue-600 border-b-2 border-blue-600"
+                      : "text-gray-600 hover:text-gray-900"
                   }`}
                 >
                   User Management
                 </button>
               )}
               <button
-                onClick={() => setActiveTab('pending')}
+                onClick={() => setActiveTab("pending")}
                 className={`px-6 py-3 text-sm font-medium ${
-                  activeTab === 'pending'
-                    ? 'text-blue-600 border-b-2 border-blue-600'
-                    : 'text-gray-600 hover:text-gray-900'
+                  activeTab === "pending"
+                    ? "text-blue-600 border-b-2 border-blue-600"
+                    : "text-gray-600 hover:text-gray-900"
                 }`}
               >
                 Pending Approvals
@@ -359,11 +435,11 @@ function AdminPage() {
                 )}
               </button>
               <button
-                onClick={() => setActiveTab('drafts')}
+                onClick={() => setActiveTab("drafts")}
                 className={`px-6 py-3 text-sm font-medium ${
-                  activeTab === 'drafts'
-                    ? 'text-blue-600 border-b-2 border-blue-600'
-                    : 'text-gray-600 hover:text-gray-900'
+                  activeTab === "drafts"
+                    ? "text-blue-600 border-b-2 border-blue-600"
+                    : "text-gray-600 hover:text-gray-900"
                 }`}
               >
                 Draft Records
@@ -373,227 +449,240 @@ function AdminPage() {
                   </span>
                 )}
               </button>
+              <button
+                onClick={() => setActiveTab("approved")}
+                className={`px-6 py-3 text-sm font-medium ${
+                  activeTab === "approved"
+                    ? "text-blue-600 border-b-2 border-blue-600"
+                    : "text-gray-600 hover:text-gray-900"
+                }`}
+              >
+                Approved Records
+                {approvedRecords.length > 0 && (
+                  <span className="ml-2 bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded-full">
+                    {approvedRecords.length}
+                  </span>
+                )}
+              </button>
             </div>
           </div>
 
           {/* User Management Tab - Admin Only */}
-          {activeTab === 'users' && currentUser?.role === 'admin' && (
+          {activeTab === "users" && currentUser?.role === "admin" && (
             <>
-
-          {/* New User Form */}
-          {showForm && (
-            <div className="bg-white p-6 rounded-lg border border-[#d1d5db] mb-6">
-              <h3 className="text-sm font-semibold text-[#1f2937] mb-4 uppercase tracking-wide">
-                Create New User
-              </h3>
-              <form onSubmit={handleCreateUser} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-medium text-[#4b5563] mb-1">
-                      Email <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="email"
-                      value={formData.email}
-                      onChange={(e) => handleEmailChange(e.target.value)}
-                      required
-                      className="w-full"
-                      placeholder="hod.cse@sairam.edu.in or user@sairam.edu.in"
-                    />
-                    <p className="text-xs text-[#6b7280] mt-1">
-                      For HOD: use hod.dept@sairam.edu.in (e.g.,
-                      hod.cse@sairam.edu.in)
-                    </p>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-[#4b5563] mb-1">
-                      Password <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.password}
-                      onChange={(e) =>
-                        setFormData({ ...formData, password: e.target.value })
-                      }
-                      required
-                      minLength={6}
-                      className="w-full"
-                      placeholder="Auto-generated based on role"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-[#4b5563] mb-1">
-                      Display Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.displayName}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          displayName: e.target.value,
-                        })
-                      }
-                      required
-                      className="w-full"
-                      placeholder="Dr. John Doe or CSE HOD"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-[#4b5563] mb-1">
-                      Role <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={formData.role}
-                      onChange={(e) =>
-                        handleRoleChange(e.target.value as UserRole)
-                      }
-                      required
-                      className="w-full"
-                    >
-                      <option value="hod">HOD User</option>
-                      <option value="master">Master User</option>
-                      <option value="admin">Admin</option>
-                    </select>
-                  </div>
-                  {formData.role === "hod" && (
-                    <div>
-                      <label className="block text-xs font-medium text-[#4b5563] mb-1">
-                        Department <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        value={formData.department}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            department: e.target.value as DepartmentCode,
-                          })
-                        }
-                        required
-                        className="w-full"
-                      >
-                        <option value="">Select Department</option>
-                        <option value="CSE">CSE</option>
-                        <option value="ECE">ECE</option>
-                        <option value="MECH">MECH</option>
-                        <option value="CIVIL">CIVIL</option>
-                        <option value="EEE">EEE</option>
-                        <option value="IT">IT</option>
-                        <option value="AIDS">AIDS</option>
-                        <option value="CSBS">CSBS</option>
-                      </select>
-                    </div>
-                  )}
-                </div>
-                <div className="flex justify-end">
-                  <button type="submit" className="btn btn-primary">
-                    Create User
-                  </button>
-                </div>
-              </form>
-            </div>
-          )}
-
-          {/* Users Table */}
-          <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="sheet-table">
-                <thead>
-                  <tr>
-                    <th style={{ width: "250px" }}>Name</th>
-                    <th style={{ width: "250px" }}>Email</th>
-                    <th style={{ width: "120px" }}>Role</th>
-                    <th style={{ width: "120px" }}>Department</th>
-                    <th style={{ width: "150px" }}>Created At</th>
-                    <th style={{ width: "100px" }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr>
-                      <td colSpan={6} className="text-center py-8">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-                      </td>
-                    </tr>
-                  ) : (
-                    users.map((user) => (
-                      <tr key={user.uid}>
-                        <td className="font-medium">{user.displayName}</td>
-                        <td>{user.email}</td>
-                        <td>
-                          <span
-                            className={`inline-flex px-2 py-1 text-xs font-medium rounded uppercase ${getRoleBadgeColor(user.role)}`}
+              {/* New User Form */}
+              {showForm && (
+                <div className="bg-white p-6 rounded-lg border border-[#d1d5db] mb-6">
+                  <h3 className="text-sm font-semibold text-[#1f2937] mb-4 uppercase tracking-wide">
+                    Create New User
+                  </h3>
+                  <form onSubmit={handleCreateUser} className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-medium text-[#4b5563] mb-1">
+                          Email <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="email"
+                          value={formData.email}
+                          onChange={(e) => handleEmailChange(e.target.value)}
+                          required
+                          className="w-full"
+                          placeholder="hod.cse@sairam.edu.in or user@sairam.edu.in"
+                        />
+                        <p className="text-xs text-[#6b7280] mt-1">
+                          For HOD: use hod.dept@sairam.edu.in (e.g.,
+                          hod.cse@sairam.edu.in)
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-[#4b5563] mb-1">
+                          Password <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.password}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              password: e.target.value,
+                            })
+                          }
+                          required
+                          minLength={6}
+                          className="w-full"
+                          placeholder="Auto-generated based on role"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-[#4b5563] mb-1">
+                          Display Name <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.displayName}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              displayName: e.target.value,
+                            })
+                          }
+                          required
+                          className="w-full"
+                          placeholder="Dr. John Doe or CSE HOD"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-[#4b5563] mb-1">
+                          Role <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          value={formData.role}
+                          onChange={(e) =>
+                            handleRoleChange(e.target.value as UserRole)
+                          }
+                          required
+                          className="w-full"
+                        >
+                          <option value="hod">HOD User</option>
+                          <option value="master">Master User</option>
+                          <option value="admin">Admin</option>
+                        </select>
+                      </div>
+                      {formData.role === "hod" && (
+                        <div>
+                          <label className="block text-xs font-medium text-[#4b5563] mb-1">
+                            Department <span className="text-red-500">*</span>
+                          </label>
+                          <select
+                            value={formData.department}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                department: e.target.value as DepartmentCode,
+                              })
+                            }
+                            required
+                            className="w-full"
                           >
-                            {user.role}
-                          </span>
-                        </td>
-                        <td>{user.department || "-"}</td>
-                        <td className="text-xs">
-                          {user.createdAt.toLocaleDateString()}
-                        </td>
-                        <td>
-                          {user.uid !== currentUser?.uid && (
-                            <button
-                              onClick={() => handleDeleteUser(user.uid)}
-                              className="text-xs text-red-600 hover:text-red-800"
-                            >
-                              Delete
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                  {!loading && users.length === 0 && (
-                    <tr>
-                      <td
-                        colSpan={6}
-                        className="text-center py-8 text-[#6b7280]"
-                      >
-                        No users found. Click &quot;+ New User&quot; to create
-                        one.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                            <option value="">Select Department</option>
+                            <option value="CSE">CSE</option>
+                            <option value="ECE">ECE</option>
+                            <option value="MECH">MECH</option>
+                            <option value="CIVIL">CIVIL</option>
+                            <option value="EEE">EEE</option>
+                            <option value="IT">IT</option>
+                            <option value="AIDS">AIDS</option>
+                            <option value="CSBS">CSBS</option>
+                          </select>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex justify-end">
+                      <button type="submit" className="btn btn-primary">
+                        Create User
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
 
-          {/* Stats Cards */}
-          <div className="grid grid-cols-3 gap-4 mt-6">
-            <div className="bg-white p-4 rounded-lg border border-[#d1d5db]">
-              <div className="text-2xl font-semibold text-[#1f2937]">
-                {users.length}
+              {/* Users Table */}
+              <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="sheet-table">
+                    <thead>
+                      <tr>
+                        <th style={{ width: "250px" }}>Name</th>
+                        <th style={{ width: "250px" }}>Email</th>
+                        <th style={{ width: "120px" }}>Role</th>
+                        <th style={{ width: "120px" }}>Department</th>
+                        <th style={{ width: "150px" }}>Created At</th>
+                        <th style={{ width: "100px" }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {loading ? (
+                        <tr key="loading">
+                          <td colSpan={6} className="text-center py-8">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                          </td>
+                        </tr>
+                      ) : users.length === 0 ? (
+                        <tr key="empty">
+                          <td
+                            colSpan={6}
+                            className="text-center py-8 text-[#6b7280]"
+                          >
+                            No users found. Click &quot;+ New User&quot; to
+                            create one.
+                          </td>
+                        </tr>
+                      ) : (
+                        users.map((user) => (
+                          <tr key={user.uid}>
+                            <td className="font-medium">{user.displayName}</td>
+                            <td>{user.email}</td>
+                            <td>
+                              <span
+                                className={`inline-flex px-2 py-1 text-xs font-medium rounded uppercase ${getRoleBadgeColor(user.role)}`}
+                              >
+                                {user.role}
+                              </span>
+                            </td>
+                            <td>{user.department || "-"}</td>
+                            <td className="text-xs">
+                              {user.createdAt.toLocaleDateString()}
+                            </td>
+                            <td>
+                              {user.uid !== currentUser?.uid && (
+                                <button
+                                  onClick={() => handleDeleteUser(user.uid)}
+                                  className="text-xs text-red-600 hover:text-red-800"
+                                >
+                                  Delete
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-              <div className="text-xs text-[#6b7280] mt-1">Total Users</div>
-            </div>
-            <div className="bg-white p-4 rounded-lg border border-[#d1d5db]">
-              <div className="text-2xl font-semibold text-purple-600">
-                {users.filter((u) => u.role === "admin").length}
+
+              {/* Stats Cards */}
+              <div className="grid grid-cols-3 gap-4 mt-6">
+                <div className="bg-white p-4 rounded-lg border border-[#d1d5db]">
+                  <div className="text-2xl font-semibold text-[#1f2937]">
+                    {users.length}
+                  </div>
+                  <div className="text-xs text-[#6b7280] mt-1">Total Users</div>
+                </div>
+                <div className="bg-white p-4 rounded-lg border border-[#d1d5db]">
+                  <div className="text-2xl font-semibold text-purple-600">
+                    {users.filter((u) => u.role === "admin").length}
+                  </div>
+                  <div className="text-xs text-[#6b7280] mt-1">Admins</div>
+                </div>
+                <div className="bg-white p-4 rounded-lg border border-[#d1d5db]">
+                  <div className="text-2xl font-semibold text-green-600">
+                    {users.filter((u) => u.role === "hod").length}
+                  </div>
+                  <div className="text-xs text-[#6b7280] mt-1">HOD Users</div>
+                </div>
               </div>
-              <div className="text-xs text-[#6b7280] mt-1">Admins</div>
-            </div>
-            <div className="bg-white p-4 rounded-lg border border-[#d1d5db]">
-              <div className="text-2xl font-semibold text-green-600">
-                {users.filter((u) => u.role === "hod").length}
-              </div>
-              <div className="text-xs text-[#6b7280] mt-1">HOD Users</div>
-            </div>
-          </div>
             </>
           )}
 
           {/* Pending Approvals Tab */}
-          {activeTab === 'pending' && (
+          {activeTab === "pending" && (
             <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-              <div className="p-4 border-b border-[#d1d5db]">
-                <h3 className="text-sm font-semibold text-[#1f2937] uppercase tracking-wide">
+              <div className="px-4 py-2 border-b border-[#d1d5db]">
+                <h3 className="text-xs font-semibold text-[#1f2937] uppercase tracking-wide">
                   Pending Approvals ({pendingRecords.length})
                 </h3>
-                <p className="text-xs text-[#6b7280] mt-1">
-                  Review and approve records with uploaded documents
-                </p>
               </div>
               {pendingRecords.length === 0 ? (
                 <div className="p-8 text-center text-gray-500">
@@ -623,48 +712,124 @@ function AdminPage() {
                           <td>{record.maintainedBy}</td>
                           <td className="text-xs">{record.fromDate}</td>
                           <td>
-                            {record.hodApprovalDoc ? (
-                              <button
-                                onClick={() => setViewingDocument({
-                                  url: record.hodApprovalDoc!,
-                                  title: `HO Approval - ${record.companyName}`
-                                })}
-                                className="text-xs text-blue-600 hover:text-blue-800 underline"
-                              >
-                                View Document
-                              </button>
-                            ) : (
-                              <span className="text-xs text-gray-400">Not uploaded</span>
-                            )}
+                            <div className="flex gap-1 items-center justify-center">
+                              {record.hodApprovalDoc && (
+                                <button
+                                  onClick={() =>
+                                    setViewingDocument({
+                                      url: record.hodApprovalDoc!,
+                                      title: `HO Approval - ${record.companyName}`,
+                                    })
+                                  }
+                                  className="text-xs text-blue-600 hover:text-blue-800 underline"
+                                >
+                                  View
+                                </button>
+                              )}
+                              {record.hodApprovalDoc && (
+                                <span className="text-gray-300">|</span>
+                              )}
+                              <label className="cursor-pointer text-green-600 hover:text-green-800 relative">
+                                {uploadingDoc?.recordId === record.id &&
+                                uploadingDoc?.field === "hodApprovalDoc" ? (
+                                  <span className="text-xs">Uploading...</span>
+                                ) : (
+                                  <span className="text-xs">
+                                    {record.hodApprovalDoc
+                                      ? "Replace"
+                                      : "Upload"}
+                                  </span>
+                                )}
+                                <input
+                                  type="file"
+                                  accept=".pdf,.doc,.docx,image/*"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                      handleFileUpload(
+                                        record.id,
+                                        "hodApprovalDoc",
+                                        file,
+                                      );
+                                    }
+                                    e.target.value = "";
+                                  }}
+                                  disabled={
+                                    uploadingDoc?.recordId === record.id &&
+                                    uploadingDoc?.field === "hodApprovalDoc"
+                                  }
+                                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              </label>
+                            </div>
                           </td>
                           <td>
-                            {record.signedAgreementDoc ? (
-                              <button
-                                onClick={() => setViewingDocument({
-                                  url: record.signedAgreementDoc!,
-                                  title: `Signed Agreement - ${record.companyName}`
-                                })}
-                                className="text-xs text-blue-600 hover:text-blue-800 underline"
-                              >
-                                View Document
-                              </button>
-                            ) : (
-                              <span className="text-xs text-gray-400">Not uploaded</span>
-                            )}
+                            <div className="flex gap-1 items-center justify-center">
+                              {record.signedAgreementDoc && (
+                                <button
+                                  onClick={() =>
+                                    setViewingDocument({
+                                      url: record.signedAgreementDoc!,
+                                      title: `Signed Agreement - ${record.companyName}`,
+                                    })
+                                  }
+                                  className="text-xs text-blue-600 hover:text-blue-800 underline"
+                                >
+                                  View
+                                </button>
+                              )}
+                              {record.signedAgreementDoc && (
+                                <span className="text-gray-300">|</span>
+                              )}
+                              <label className="cursor-pointer text-green-600 hover:text-green-800 relative">
+                                {uploadingDoc?.recordId === record.id &&
+                                uploadingDoc?.field === "signedAgreementDoc" ? (
+                                  <span className="text-xs">Uploading...</span>
+                                ) : (
+                                  <span className="text-xs">
+                                    {record.signedAgreementDoc
+                                      ? "Replace"
+                                      : "Upload"}
+                                  </span>
+                                )}
+                                <input
+                                  type="file"
+                                  accept=".pdf,.doc,.docx,image/*"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                      handleFileUpload(
+                                        record.id,
+                                        "signedAgreementDoc",
+                                        file,
+                                      );
+                                    }
+                                    e.target.value = "";
+                                  }}
+                                  disabled={
+                                    uploadingDoc?.recordId === record.id &&
+                                    uploadingDoc?.field === "signedAgreementDoc"
+                                  }
+                                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              </label>
+                            </div>
                           </td>
                           <td>
-                            <div className="flex gap-2">
+                            <div className="flex gap-1.5">
                               <button
                                 onClick={() => handleApproveRecord(record.id)}
-                                className="btn btn-sm bg-green-600 hover:bg-green-700 text-white px-3 py-1 text-xs"
+                                className="px-2.5 py-1 text-[10px] font-medium bg-green-600 hover:bg-green-700 text-white rounded transition-colors"
                               >
-                                ✓ Approve
+                                Approve
                               </button>
                               <button
                                 onClick={() => handleRejectRecord(record.id)}
-                                className="btn btn-sm bg-red-600 hover:bg-red-700 text-white px-3 py-1 text-xs"
+                                className="px-2.5 py-1 text-[10px] font-medium bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
                               >
-                                ✗ Reject
+                                Reject
                               </button>
                             </div>
                           </td>
@@ -678,15 +843,12 @@ function AdminPage() {
           )}
 
           {/* Draft Records Tab */}
-          {activeTab === 'drafts' && (
+          {activeTab === "drafts" && (
             <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-              <div className="p-4 border-b border-[#d1d5db]">
-                <h3 className="text-sm font-semibold text-[#1f2937] uppercase tracking-wide">
+              <div className="px-4 py-2 border-b border-[#d1d5db]">
+                <h3 className="text-xs font-semibold text-[#1f2937] uppercase tracking-wide">
                   Draft Records ({draftRecords.length})
                 </h3>
-                <p className="text-xs text-[#6b7280] mt-1">
-                  Records without complete document uploads
-                </p>
               </div>
               {draftRecords.length === 0 ? (
                 <div className="p-8 text-center text-gray-500">
@@ -704,6 +866,7 @@ function AdminPage() {
                         <th style={{ width: "120px" }}>From Date</th>
                         <th style={{ width: "150px" }}>HO Approval</th>
                         <th style={{ width: "150px" }}>Signed Agreement</th>
+                        <th style={{ width: "200px" }}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -715,33 +878,224 @@ function AdminPage() {
                           <td>{record.maintainedBy}</td>
                           <td className="text-xs">{record.fromDate}</td>
                           <td>
+                            <div className="flex gap-1 items-center justify-center">
+                              {record.hodApprovalDoc && (
+                                <button
+                                  onClick={() =>
+                                    setViewingDocument({
+                                      url: record.hodApprovalDoc!,
+                                      title: `HO Approval - ${record.companyName}`,
+                                    })
+                                  }
+                                  className="text-xs text-blue-600 hover:text-blue-800 underline"
+                                >
+                                  View
+                                </button>
+                              )}
+                              {record.hodApprovalDoc && (
+                                <span className="text-gray-300">|</span>
+                              )}
+                              <label className="cursor-pointer text-green-600 hover:text-green-800 relative">
+                                {uploadingDoc?.recordId === record.id &&
+                                uploadingDoc?.field === "hodApprovalDoc" ? (
+                                  <span className="text-xs">Uploading...</span>
+                                ) : (
+                                  <span className="text-xs">
+                                    {record.hodApprovalDoc
+                                      ? "Replace"
+                                      : "Upload"}
+                                  </span>
+                                )}
+                                <input
+                                  type="file"
+                                  accept=".pdf,.doc,.docx,image/*"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                      handleFileUpload(
+                                        record.id,
+                                        "hodApprovalDoc",
+                                        file,
+                                      );
+                                    }
+                                    e.target.value = "";
+                                  }}
+                                  disabled={
+                                    uploadingDoc?.recordId === record.id &&
+                                    uploadingDoc?.field === "hodApprovalDoc"
+                                  }
+                                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              </label>
+                            </div>
+                          </td>
+                          <td>
+                            <div className="flex gap-1 items-center justify-center">
+                              {record.signedAgreementDoc && (
+                                <button
+                                  onClick={() =>
+                                    setViewingDocument({
+                                      url: record.signedAgreementDoc!,
+                                      title: `Signed Agreement - ${record.companyName}`,
+                                    })
+                                  }
+                                  className="text-xs text-blue-600 hover:text-blue-800 underline"
+                                >
+                                  View
+                                </button>
+                              )}
+                              {record.signedAgreementDoc && (
+                                <span className="text-gray-300">|</span>
+                              )}
+                              <label className="cursor-pointer text-green-600 hover:text-green-800 relative">
+                                {uploadingDoc?.recordId === record.id &&
+                                uploadingDoc?.field === "signedAgreementDoc" ? (
+                                  <span className="text-xs">Uploading...</span>
+                                ) : (
+                                  <span className="text-xs">
+                                    {record.signedAgreementDoc
+                                      ? "Replace"
+                                      : "Upload"}
+                                  </span>
+                                )}
+                                <input
+                                  type="file"
+                                  accept=".pdf,.doc,.docx,image/*"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                      handleFileUpload(
+                                        record.id,
+                                        "signedAgreementDoc",
+                                        file,
+                                      );
+                                    }
+                                    e.target.value = "";
+                                  }}
+                                  disabled={
+                                    uploadingDoc?.recordId === record.id &&
+                                    uploadingDoc?.field === "signedAgreementDoc"
+                                  }
+                                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              </label>
+                            </div>
+                          </td>
+                          <td>
+                            <div className="flex gap-1.5">
+                              <button
+                                onClick={() => handleMoveToPending(record.id)}
+                                className="px-2.5 py-1 text-[10px] font-medium bg-orange-600 hover:bg-orange-700 text-white rounded transition-colors"
+                              >
+                                To Pending
+                              </button>
+                              <button
+                                onClick={() => handleApproveRecord(record.id)}
+                                className="px-2.5 py-1 text-[10px] font-medium bg-green-600 hover:bg-green-700 text-white rounded transition-colors"
+                              >
+                                Approve
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Approved Records Tab */}
+          {activeTab === "approved" && (
+            <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+              <div className="px-4 py-2 border-b border-[#d1d5db]">
+                <h3 className="text-xs font-semibold text-[#1f2937] uppercase tracking-wide">
+                  Approved Records ({approvedRecords.length})
+                </h3>
+              </div>
+              {approvedRecords.length === 0 ? (
+                <div className="p-8 text-center text-gray-500">
+                  No approved records
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="sheet-table">
+                    <thead>
+                      <tr>
+                        <th style={{ width: "100px" }}>ID</th>
+                        <th style={{ width: "200px" }}>Company Name</th>
+                        <th style={{ width: "120px" }}>Department</th>
+                        <th style={{ width: "130px" }}>Maintained By</th>
+                        <th style={{ width: "120px" }}>From Date</th>
+                        <th style={{ width: "120px" }}>To Date</th>
+                        <th style={{ width: "100px" }}>Status</th>
+                        <th style={{ width: "150px" }}>HO Approval</th>
+                        <th style={{ width: "150px" }}>Signed Agreement</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {approvedRecords.map((record) => (
+                        <tr key={record.id}>
+                          <td className="font-mono text-xs">{record.id}</td>
+                          <td className="font-medium">{record.companyName}</td>
+                          <td>{record.department}</td>
+                          <td>{record.maintainedBy}</td>
+                          <td className="text-xs">{record.fromDate}</td>
+                          <td className="text-xs">{record.toDate}</td>
+                          <td>
+                            <span
+                              className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                record.status === "Active"
+                                  ? "bg-green-100 text-green-800"
+                                  : record.status === "Expired"
+                                    ? "bg-red-100 text-red-800"
+                                    : record.status === "Renewal Pending"
+                                      ? "bg-orange-100 text-orange-800"
+                                      : "bg-gray-100 text-gray-800"
+                              }`}
+                            >
+                              {record.status}
+                            </span>
+                          </td>
+                          <td>
                             {record.hodApprovalDoc ? (
                               <button
-                                onClick={() => setViewingDocument({
-                                  url: record.hodApprovalDoc!,
-                                  title: `HO Approval - ${record.companyName}`
-                                })}
-                                className="text-xs text-blue-600 hover:text-blue-800 underline"
+                                onClick={() =>
+                                  setViewingDocument({
+                                    url: record.hodApprovalDoc!,
+                                    title: `HO Approval - ${record.companyName}`,
+                                  })
+                                }
+                                className="text-[10px] text-blue-600 hover:text-blue-800 font-medium"
                               >
-                                View Document
+                                View
                               </button>
                             ) : (
-                              <span className="text-xs text-red-500">Missing</span>
+                              <span className="text-[10px] text-gray-400">
+                                —
+                              </span>
                             )}
                           </td>
                           <td>
                             {record.signedAgreementDoc ? (
                               <button
-                                onClick={() => setViewingDocument({
-                                  url: record.signedAgreementDoc!,
-                                  title: `Signed Agreement - ${record.companyName}`
-                                })}
-                                className="text-xs text-blue-600 hover:text-blue-800 underline"
+                                onClick={() =>
+                                  setViewingDocument({
+                                    url: record.signedAgreementDoc!,
+                                    title: `Signed Agreement - ${record.companyName}`,
+                                  })
+                                }
+                                className="text-[10px] text-blue-600 hover:text-blue-800 font-medium"
                               >
-                                View Document
+                                View
                               </button>
                             ) : (
-                              <span className="text-xs text-red-500">Missing</span>
+                              <span className="text-[10px] text-gray-400">
+                                —
+                              </span>
                             )}
                           </td>
                         </tr>

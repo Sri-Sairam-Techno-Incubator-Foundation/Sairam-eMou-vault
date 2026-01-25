@@ -358,3 +358,47 @@ textarea:disabled {
   padding: 12px;
   text-align: center;
 }
+
+/* Smooth bounce animation for tooltip popup */
+@keyframes smoothBounceIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.8) translateY(-10px);
+  }
+
+  60% {
+    opacity: 1;
+    transform: scale(1.02) translateY(0);
+  }
+
+  80% {
+    transform: scale(0.98) translateY(0);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Legacy bounce animation */
+@keyframes bounceIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.3) translateY(-20px);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.05) translateY(0);
+  }
+
+  70% {
+    transform: scale(0.9) translateY(0);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}

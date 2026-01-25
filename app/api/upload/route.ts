@@ -1,12 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { v2 as cloudinary } from 'cloudinary';
-
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,27 +12,37 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Convert file to base64
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-    const base64File = `data:${file.type};base64,${buffer.toString('base64')}`;
-
     // Determine resource type - PDFs must be 'raw' for proper access
     const isPDF = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
-    const resourceType = isPDF ? 'raw' : 'auto';
+    const resourceType = isPDF ? 'raw' : 'image';
 
-    // Upload to Cloudinary with signed upload (full control)
-    const uploadResponse = await cloudinary.uploader.upload(base64File, {
-      folder: 'emou-documents',
-      resource_type: resourceType,
-      access_mode: 'public', // Ensures public access
-      type: 'upload', // Upload type (not authenticated)
+    const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+    const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
+
+    // Create new FormData for Cloudinary
+    const cloudinaryFormData = new FormData();
+    cloudinaryFormData.append('file', file);
+    cloudinaryFormData.append('upload_preset', uploadPreset!);
+
+    // Upload directly to Cloudinary using unsigned upload
+    const cloudinaryUrl = `https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`;
+    
+    const uploadResponse = await fetch(cloudinaryUrl, {
+      method: 'POST',
+      body: cloudinaryFormData,
     });
+
+    if (!uploadResponse.ok) {
+      const errorData = await uploadResponse.json();
+      throw new Error(errorData.error?.message || 'Upload failed');
+    }
+
+    const data = await uploadResponse.json();
 
     return NextResponse.json({
       success: true,
-      url: uploadResponse.secure_url,
-      public_id: uploadResponse.public_id,
+      url: data.secure_url,
+      public_id: data.public_id,
     });
   } catch (error: any) {
     console.error('Upload error:', error);

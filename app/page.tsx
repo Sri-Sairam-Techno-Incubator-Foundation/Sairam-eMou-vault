@@ -37,7 +37,10 @@ function HomePage() {
   const [viewingRecord, setViewingRecord] = useState<EMoURecord | null>(null);
   const [inlineEditingId, setInlineEditingId] = useState<string | null>(null);
   const [inlineEditData, setInlineEditData] = useState<Partial<EMoURecord>>({});
-  const [editingCell, setEditingCell] = useState<{ recordId: string; field: string } | null>(null);
+  const [editingCell, setEditingCell] = useState<{
+    recordId: string;
+    field: string;
+  } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [scrollStart, setScrollStart] = useState({ left: 0, top: 0 });
@@ -45,7 +48,16 @@ function HomePage() {
   const [creatingNewRecord, setCreatingNewRecord] = useState(false);
   const [newRecordData, setNewRecordData] = useState<Partial<EMoURecord>>({});
   const [editingNewCell, setEditingNewCell] = useState<string | null>(null);
-  const [viewingDocument, setViewingDocument] = useState<{ url: string; title: string } | null>(null);
+  const [viewingDocument, setViewingDocument] = useState<{
+    url: string;
+    title: string;
+  } | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(20);
+  const [uploadingDoc, setUploadingDoc] = useState<{
+    recordId: string;
+    field: "hodApprovalDoc" | "signedAgreementDoc";
+  } | null>(null);
 
   const departments = [
     "CSE",
@@ -64,6 +76,7 @@ function HomePage() {
 
   useEffect(() => {
     filterRecords();
+    setCurrentPage(1); // Reset to first page when filters change
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [records, selectedDepartment, selectedStatus, searchTerm]);
 
@@ -72,10 +85,13 @@ function HomePage() {
       if (!editingCell) return;
 
       const target = event.target as HTMLElement;
-      
+
       // Check if click is on an editable cell or date input
-      const isEditableCell = target.hasAttribute('contenteditable') || target.closest('[contenteditable="true"]');
-      const isDateInput = target.tagName === 'INPUT' && target.getAttribute('type') === 'date';
+      const isEditableCell =
+        target.hasAttribute("contenteditable") ||
+        target.closest('[contenteditable="true"]');
+      const isDateInput =
+        target.tagName === "INPUT" && target.getAttribute("type") === "date";
       const isWithinDateInput = target.closest('input[type="date"]');
 
       // If clicking outside editing cell (and not on a date input), auto-save
@@ -85,11 +101,11 @@ function HomePage() {
     };
 
     if (editingCell) {
-      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener("mousedown", handleClickOutside);
     }
 
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [editingCell, inlineEditData, user]);
 
@@ -109,8 +125,8 @@ function HomePage() {
     let filtered = records;
 
     // Only show approved records for non-admin users
-    if (user?.role !== 'admin') {
-      filtered = filtered.filter((r) => r.approvalStatus === 'approved');
+    if (user?.role !== "admin") {
+      filtered = filtered.filter((r) => r.approvalStatus === "approved");
     }
 
     if (selectedDepartment !== "all") {
@@ -135,7 +151,7 @@ function HomePage() {
     filtered.sort((a, b) => {
       const deptCompare = a.department.localeCompare(b.department);
       if (deptCompare !== 0) return deptCompare;
-      
+
       // Extract last 3 digits from ID (e.g., "26CSE001" -> 1)
       const aSeq = parseInt(a.id.slice(-3));
       const bSeq = parseInt(b.id.slice(-3));
@@ -284,7 +300,13 @@ function HomePage() {
   };
 
   const handleCellClick = (record: EMoURecord, field: keyof EMoURecord) => {
-    if (canEdit(record.createdBy, record.department) && field !== 'id' && field !== 'createdBy' && field !== 'createdByName' && field !== 'createdAt') {
+    if (
+      canEdit(record.createdBy, record.department) &&
+      field !== "id" &&
+      field !== "createdBy" &&
+      field !== "createdByName" &&
+      field !== "createdAt"
+    ) {
       setEditingCell({ recordId: record.id, field });
       setInlineEditData(record);
     }
@@ -315,8 +337,8 @@ function HomePage() {
         prevRecords.map((record) =>
           record.id === editingCell.recordId
             ? { ...record, ...updatedData }
-            : record
-        )
+            : record,
+        ),
       );
 
       setEditingCell(null);
@@ -332,7 +354,10 @@ function HomePage() {
     setInlineEditData({});
   };
 
-  const handleNewRecordFieldChange = (field: string, value: string | number) => {
+  const handleNewRecordFieldChange = (
+    field: string,
+    value: string | number,
+  ) => {
     setNewRecordData({ ...newRecordData, [field]: value });
   };
 
@@ -341,7 +366,10 @@ function HomePage() {
 
     // Validate required fields
     if (!data.companyName || !data.department) {
-      setAlert({ message: "Company Name and Department are required!", type: "error" });
+      setAlert({
+        message: "Company Name and Department are required!",
+        type: "error",
+      });
       return;
     }
 
@@ -354,7 +382,8 @@ function HomePage() {
         toDate: data.toDate || "",
         scope: data.scope || "National",
         maintainedBy: data.maintainedBy || "Departments",
-        approvalStatus: (data.hodApprovalDoc && data.signedAgreementDoc) ? "pending" : "draft",
+        approvalStatus:
+          data.hodApprovalDoc && data.signedAgreementDoc ? "pending" : "draft",
         status: data.status || "Draft",
         description: data.description || "",
         documentAvailability: data.documentAvailability || "Not Available",
@@ -364,7 +393,12 @@ function HomePage() {
         perStudentCost: data.perStudentCost || 0,
         placementOpportunity: data.placementOpportunity || 0,
         internshipOpportunity: data.internshipOpportunity || 0,
-        companyRelationship: (data.companyRelationship || 3) as 1 | 2 | 3 | 4 | 5,
+        companyRelationship: (data.companyRelationship || 3) as
+          | 1
+          | 2
+          | 3
+          | 4
+          | 5,
         aboutCompany: data.aboutCompany,
         companyAddress: data.companyAddress,
         companyWebsite: data.companyWebsite,
@@ -385,7 +419,7 @@ function HomePage() {
       };
 
       await createEMoU(recordData as Omit<EMoURecord, "id">);
-      
+
       setCreatingNewRecord(false);
       setNewRecordData({});
       setEditingNewCell(null);
@@ -485,6 +519,54 @@ function HomePage() {
     setIsDragging(false);
   };
 
+  const handleFileUpload = async (
+    recordId: string,
+    field: "hodApprovalDoc" | "signedAgreementDoc",
+    file: File,
+  ) => {
+    if (!user) return;
+
+    setUploadingDoc({ recordId, field });
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error("Upload failed");
+      }
+
+      const { url } = await response.json();
+
+      // Update the record with the new document URL
+      await updateEMoU(recordId, {
+        [field]: url,
+        updatedBy: user.uid,
+        updatedByName: user.displayName,
+        updatedAt: new Date(),
+      });
+
+      // Refresh records
+      loadRecords();
+      setAlert({
+        message: `Document uploaded successfully!`,
+        type: "success",
+      });
+    } catch (error) {
+      console.error("Failed to upload document:", error);
+      setAlert({
+        message: "Failed to upload document",
+        type: "error",
+      });
+    } finally {
+      setUploadingDoc(null);
+    }
+  };
+
   const stats = {
     total: filteredRecords.length,
     active: filteredRecords.filter((r) => r.status === "Active").length,
@@ -498,6 +580,12 @@ function HomePage() {
       );
     }).length,
     expired: filteredRecords.filter((r) => r.status === "Expired").length,
+    draft: filteredRecords.filter((r) => r.status === "Draft").length,
+    renewal: filteredRecords.filter((r) => r.status === "Renewal Pending")
+      .length,
+    withDocs: filteredRecords.filter(
+      (r) => r.hodApprovalDoc && r.signedAgreementDoc,
+    ).length,
   };
 
   function parseDate(dateStr: string): Date {
@@ -693,13 +781,49 @@ function HomePage() {
                 className="w-full max-w-md"
               />
             </div>
-            <div className="text-xs text-[#6b7280]">
-              {filteredRecords.length} records
+            <div className="flex items-center gap-3">
+              <div className="text-xs text-[#6b7280]">
+                {filteredRecords.length} records
+              </div>
+              {filteredRecords.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() =>
+                      setCurrentPage((prev) => Math.max(1, prev - 1))
+                    }
+                    disabled={currentPage === 1}
+                    className="px-2 py-1 text-xs border border-[#d1d5db] rounded disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer hover:bg-gray-50"
+                  >
+                    ‹
+                  </button>
+                  <span className="text-xs text-[#6b7280]">
+                    Page {currentPage} of{" "}
+                    {Math.ceil(filteredRecords.length / itemsPerPage)}
+                  </span>
+                  <button
+                    onClick={() =>
+                      setCurrentPage((prev) =>
+                        Math.min(
+                          Math.ceil(filteredRecords.length / itemsPerPage),
+                          prev + 1,
+                        ),
+                      )
+                    }
+                    disabled={
+                      currentPage >=
+                      Math.ceil(filteredRecords.length / itemsPerPage)
+                    }
+                    className="px-2 py-1 text-xs border border-[#d1d5db] rounded disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer hover:bg-gray-50"
+                  >
+                    ›
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Main Content - Spreadsheet Table */}
+        {/* Main Content */}
         <div className="p-6">
           {loading ? (
             <div className="flex items-center justify-center py-12">
@@ -710,54 +834,151 @@ function HomePage() {
             </div>
           ) : (
             <>
-              <div
-                className="overflow-x-auto bg-white rounded-lg shadow-sm relative"
-                style={{ cursor: isDragging ? "grabbing" : "grab" }}
-                onMouseDown={handleMouseDown}
-                onMouseMove={handleMouseMove}
-                onMouseUp={handleMouseUp}
-                onMouseLeave={() => { handleMouseLeave(); setShowAddButton(false); }}
-                onMouseEnter={() => setShowAddButton(true)}
-              >
-                <table className="sheet-table">
-                  <thead className="sticky top-0 z-10 bg-white shadow-sm">
-                    <tr>
-                      <th style={{ width: "100px" }}>ID</th>
-                      <th style={{ minWidth: "200px" }}>Company Name</th>
-                      <th style={{ width: "100px" }}>Department</th>
-                      <th style={{ width: "120px" }}>Scope</th>
-                      <th style={{ width: "130px" }}>Maintained By</th>
-                      <th style={{ width: "100px" }}>From Date</th>
-                      <th style={{ width: "100px" }}>To Date</th>
-                      <th style={{ width: "110px" }}>Status</th>
-                      <th style={{ minWidth: "250px" }}>Description</th>
-                      <th style={{ minWidth: "200px" }}>About Company</th>
-                      <th style={{ minWidth: "200px" }}>Company Address</th>
-                      <th style={{ width: "180px" }}>Company Website</th>
-                      <th style={{ width: "90px" }}>Relationship</th>
-                      <th style={{ width: "150px" }}>Industry Contact</th>
-                      <th style={{ width: "120px" }}>Industry Mobile</th>
-                      <th style={{ width: "180px" }}>Industry Email</th>
-                      <th style={{ width: "150px" }}>Institution Contact</th>
-                      <th style={{ width: "120px" }}>Institution Mobile</th>
-                      <th style={{ width: "180px" }}>Institution Email</th>
-                      <th style={{ width: "150px" }}>Clubs Aligned</th>
-                      <th style={{ width: "150px" }}>SDG Goals</th>
-                      <th style={{ minWidth: "200px" }}>Skills/Technologies</th>
-                      <th style={{ width: "90px" }}>Per Student Cost</th>
-                      <th style={{ width: "90px" }}>Placement</th>
-                      <th style={{ width: "90px" }}>Internship</th>
-                      <th style={{ width: "80px" }}>Renewal</th>
-                      <th style={{ minWidth: "200px" }}>Benefits Achieved</th>
-                      <th style={{ width: "150px" }}>Doc Availability</th>
-                      <th style={{ width: "180px" }}>HO Approval</th>
-                      <th style={{ width: "180px" }}>Signed Agreement</th>
-                      <th style={{ width: "120px" }}>Created By</th>
-                      <th style={{ width: "100px" }}>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {/* Inline New Record Row
+              {(() => {
+                // Calculate pagination
+                const startIndex = (currentPage - 1) * itemsPerPage;
+                const endIndex = startIndex + itemsPerPage;
+                const paginatedRecords = filteredRecords.slice(
+                  startIndex,
+                  endIndex,
+                );
+
+                return (
+                  <>
+                    {/* Summary Cards */}
+                    <div className="grid grid-cols-7 gap-2 mb-3">
+                      <div className="bg-white p-1.5 rounded border border-[#d1d5db]">
+                        <div className="text-base font-semibold text-[#1f2937]">
+                          {stats.total}
+                        </div>
+                        <div className="text-[10px] text-[#6b7280]">Total</div>
+                      </div>
+                      <div className="bg-white p-1.5 rounded border border-[#d1d5db]">
+                        <div className="text-base font-semibold text-green-600">
+                          {stats.active}
+                        </div>
+                        <div className="text-[10px] text-[#6b7280]">Active</div>
+                      </div>
+                      <div className="bg-white p-1.5 rounded border border-[#d1d5db]">
+                        <div className="text-base font-semibold text-orange-600">
+                          {stats.expiring}
+                        </div>
+                        <div className="text-[10px] text-[#6b7280]">
+                          Expiring
+                        </div>
+                      </div>
+                      <div className="bg-white p-1.5 rounded border border-[#d1d5db]">
+                        <div className="text-base font-semibold text-red-600">
+                          {stats.expired}
+                        </div>
+                        <div className="text-[10px] text-[#6b7280]">
+                          Expired
+                        </div>
+                      </div>
+                      <div className="bg-white p-1.5 rounded border border-[#d1d5db]">
+                        <div className="text-base font-semibold text-gray-600">
+                          {stats.draft}
+                        </div>
+                        <div className="text-[10px] text-[#6b7280]">Draft</div>
+                      </div>
+                      <div className="bg-white p-1.5 rounded border border-[#d1d5db]">
+                        <div className="text-base font-semibold text-purple-600">
+                          {stats.renewal}
+                        </div>
+                        <div className="text-[10px] text-[#6b7280]">
+                          Renewal
+                        </div>
+                      </div>
+                      <div className="bg-white p-1.5 rounded border border-[#d1d5db]">
+                        <div className="text-base font-semibold text-blue-600">
+                          {stats.withDocs}
+                        </div>
+                        <div className="text-[10px] text-[#6b7280]">Docs</div>
+                      </div>
+                    </div>
+
+                    {/* Scrollable Table Container */}
+                    <div
+                      className="overflow-auto bg-white rounded-lg shadow-sm relative"
+                      style={{
+                        cursor: isDragging ? "grabbing" : "grab",
+                        maxHeight: "calc(100vh - 300px)",
+                      }}
+                      onMouseDown={handleMouseDown}
+                      onMouseMove={handleMouseMove}
+                      onMouseUp={handleMouseUp}
+                      onMouseLeave={() => {
+                        handleMouseLeave();
+                        setShowAddButton(false);
+                      }}
+                      onMouseEnter={() => setShowAddButton(true)}
+                    >
+                      <style jsx>{`
+                        .sheet-table td {
+                          max-width: 300px;
+                          overflow-x: auto;
+                          white-space: nowrap;
+                        }
+                        .sheet-table td::-webkit-scrollbar {
+                          height: 4px;
+                        }
+                        .sheet-table td::-webkit-scrollbar-thumb {
+                          background: #cbd5e0;
+                          border-radius: 2px;
+                        }
+                      `}</style>
+                      <table className="sheet-table">
+                        <thead className="sticky top-0 z-10 bg-white shadow-sm">
+                          <tr>
+                            <th style={{ width: "60px" }}>S.No</th>
+                            <th style={{ width: "100px" }}>ID</th>
+                            <th style={{ minWidth: "200px" }}>Company Name</th>
+                            <th style={{ width: "100px" }}>Department</th>
+                            <th style={{ width: "120px" }}>Scope</th>
+                            <th style={{ width: "140px" }}>Maintained By</th>
+                            <th style={{ width: "100px" }}>From Date</th>
+                            <th style={{ width: "100px" }}>To Date</th>
+                            <th style={{ width: "110px" }}>Status</th>
+                            <th style={{ minWidth: "250px" }}>Description</th>
+                            <th style={{ minWidth: "200px" }}>About Company</th>
+                            <th style={{ minWidth: "200px" }}>
+                              Company Address
+                            </th>
+                            <th style={{ width: "180px" }}>Company Website</th>
+                            <th style={{ width: "90px" }}>Relationship</th>
+                            <th style={{ width: "150px" }}>Industry Contact</th>
+                            <th style={{ width: "120px" }}>Industry Mobile</th>
+                            <th style={{ width: "180px" }}>Industry Email</th>
+                            <th style={{ width: "150px" }}>
+                              Institution Contact
+                            </th>
+                            <th style={{ width: "120px" }}>
+                              Institution Mobile
+                            </th>
+                            <th style={{ width: "180px" }}>
+                              Institution Email
+                            </th>
+                            <th style={{ width: "150px" }}>Clubs Aligned</th>
+                            <th style={{ width: "150px" }}>SDG Goals</th>
+                            <th style={{ minWidth: "200px" }}>
+                              Skills/Technologies
+                            </th>
+                            <th style={{ width: "90px" }}>Per Student Cost</th>
+                            <th style={{ width: "90px" }}>Placement</th>
+                            <th style={{ width: "90px" }}>Internship</th>
+                            <th style={{ width: "80px" }}>Renewal</th>
+                            <th style={{ minWidth: "200px" }}>
+                              Benefits Achieved
+                            </th>
+                            <th style={{ width: "150px" }}>Doc Availability</th>
+                            <th style={{ width: "180px" }}>HO Approval</th>
+                            <th style={{ width: "180px" }}>Signed Agreement</th>
+                            <th style={{ width: "120px" }}>Created By</th>
+                            <th style={{ width: "100px" }}>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {/* Inline New Record Row
                     {!creatingNewRecord ? (
                       <tr className="bg-blue-50 border-b-2 border-blue-200">
                         <td className="text-center">
@@ -826,340 +1047,653 @@ function HomePage() {
                         </td>
                       </tr>
                     )} */}
-                    {filteredRecords.map((record) => {
-                      const isEditable = canEdit(record.createdBy, record.department);
+                          {paginatedRecords.map((record, index) => {
+                            const globalIndex =
+                              (currentPage - 1) * itemsPerPage + index;
+                            const isEditable = canEdit(
+                              record.createdBy,
+                              record.department,
+                            );
 
-                      const renderEditableCell = (
-                        field: keyof EMoURecord, 
-                        content: React.ReactNode, 
-                        className: string = "text-xs",
-                        truncateLength?: number
-                      ) => {
-                        const isEditing = editingCell?.recordId === record.id && editingCell?.field === field;
-                        const cellStyle = isEditing 
-                          ? { 
-                              border: '3px solid #000000', 
-                              outline: 'none',
-                              padding: '4px',
-                              backgroundColor: '#f5f5f5'
-                            } 
-                          : {};
-                        
-                        let displayContent = content;
-                        if (truncateLength && typeof content === 'string' && content.length > truncateLength) {
-                          displayContent = content.substring(0, truncateLength) + '...';
-                        }
-                        
-                        return (
-                          <td
-                            className={`${className} ${isEditable ? 'cursor-text hover:bg-blue-50' : ''}`}
-                            contentEditable={isEditing}
-                            suppressContentEditableWarning
-                            onClick={() => isEditable && handleCellClick(record, field)}
-                            onBlur={(e) => {
-                              if (isEditing) {
-                                handleInlineFieldChange(field, e.currentTarget.textContent || '');
+                            const renderEditableCell = (
+                              field: keyof EMoURecord,
+                              content: React.ReactNode,
+                              className: string = "text-xs",
+                              truncateLength?: number,
+                            ) => {
+                              const isEditing =
+                                editingCell?.recordId === record.id &&
+                                editingCell?.field === field;
+                              const cellStyle = isEditing
+                                ? {
+                                    border: "3px solid #000000",
+                                    outline: "none",
+                                    padding: "4px",
+                                    backgroundColor: "#f5f5f5",
+                                  }
+                                : {};
+
+                              let displayContent = content;
+                              if (
+                                truncateLength &&
+                                typeof content === "string" &&
+                                content.length > truncateLength
+                              ) {
+                                displayContent =
+                                  content.substring(0, truncateLength) + "...";
                               }
-                            }}
-                            style={cellStyle}
-                            title={truncateLength && typeof content === 'string' ? content : (isEditable && !isEditing ? "Click to edit" : "")}
-                          >
-                            {displayContent}
-                          </td>
-                        );
-                      };
 
-                      return (
-                        <tr
-                          key={record.id}
-                          className="hover:bg-gray-50"
-                        >
-                          <td className="font-medium text-[#2563eb] font-mono">
-                            {record.id}
-                          </td>
-                          {renderEditableCell("companyName", record.companyName, "")}
-                          {renderEditableCell("department", record.department, "")}
-                          {renderEditableCell("scope", record.scope || "National", "text-center")}
-                          {renderEditableCell("maintainedBy", record.maintainedBy || "Departments", "text-center")}
-                          {(() => {
-                            const isEditing = editingCell?.recordId === record.id && editingCell?.field === 'fromDate';
-                            const cellStyle = isEditing 
-                              ? { border: '3px solid #000000', outline: 'none', padding: '0', backgroundColor: '#f5f5f5' } 
-                              : {};
-                            
-                            // Convert dd.mm.yyyy to yyyy-mm-dd for date input
-                            const convertToInputFormat = (dateStr: string) => {
-                              if (!dateStr) return '';
-                              const [day, month, year] = dateStr.split('.');
-                              return `${year}-${month}-${day}`;
-                            };
-                            
-                            return (
-                              <td
-                                className={`${isEditable ? 'cursor-text hover:bg-blue-50' : ''}`}
-                                onClick={() => isEditable && handleCellClick(record, 'fromDate')}
-                                style={cellStyle}
-                                title={isEditable && !isEditing ? "Click to edit" : ""}
-                              >
-                                {isEditing ? (
-                                  <input
-                                    type="date"
-                                    defaultValue={convertToInputFormat(record.fromDate)}
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      if (val) {
-                                        const [year, month, day] = val.split('-');
-                                        handleInlineFieldChange('fromDate', `${day}.${month}.${year}`);
-                                      }
-                                    }}
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter') {
-                                        saveInlineEdit();
-                                      } else if (e.key === 'Escape') {
-                                        cancelInlineEdit();
-                                      }
-                                    }}
-                                    autoFocus
-                                    className="w-full h-full px-1 py-1 text-xs border-0 focus:outline-none focus:ring-2 focus:ring-blue-400"
-                                  />
-                                ) : (
-                                  record.fromDate
-                                )}
-                              </td>
-                            );
-                          })()}
-                          {(() => {
-                            const isEditing = editingCell?.recordId === record.id && editingCell?.field === 'toDate';
-                            const cellStyle = isEditing 
-                              ? { border: '3px solid #000000', outline: 'none', padding: '0', backgroundColor: '#f5f5f5' } 
-                              : {};
-                            
-                            // Convert dd.mm.yyyy to yyyy-mm-dd for date input
-                            const convertToInputFormat = (dateStr: string) => {
-                              if (!dateStr) return '';
-                              const [day, month, year] = dateStr.split('.');
-                              return `${year}-${month}-${day}`;
-                            };
-                            
-                            return (
-                              <td
-                                className={`${isEditable ? 'cursor-text hover:bg-blue-50' : ''}`}
-                                onClick={() => isEditable && handleCellClick(record, 'toDate')}
-                                style={cellStyle}
-                                title={isEditable && !isEditing ? "Click to edit" : ""}
-                              >
-                                {isEditing ? (
-                                  <input
-                                    type="date"
-                                    defaultValue={convertToInputFormat(record.toDate)}
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      if (val) {
-                                        const [year, month, day] = val.split('-');
-                                        handleInlineFieldChange('toDate', `${day}.${month}.${year}`);
-                                      }
-                                    }}
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter') {
-                                        saveInlineEdit();
-                                      } else if (e.key === 'Escape') {
-                                        cancelInlineEdit();
-                                      }
-                                    }}
-                                    autoFocus
-                                    className="w-full h-full px-1 py-1 text-xs border-0 focus:outline-none focus:ring-2 focus:ring-blue-400"
-                                  />
-                                ) : (
-                                  record.toDate
-                                )}
-                              </td>
-                            );
-                          })()}
-                          {(() => {
-                            const isEditing = editingCell?.recordId === record.id && editingCell?.field === 'status';
-                            const cellStyle = isEditing 
-                              ? { border: '3px solid #000000', outline: 'none', padding: '4px', backgroundColor: '#f5f5f5' } 
-                              : {};
-                            
-                            return (
-                              <td
-                                className={`${isEditable ? 'cursor-text hover:bg-blue-50' : ''}`}
-                                contentEditable={isEditing}
-                                suppressContentEditableWarning
-                                onClick={() => isEditable && handleCellClick(record, 'status')}
-                                onBlur={(e) => {
-                                  if (isEditing) {
-                                    handleInlineFieldChange('status', e.currentTarget.textContent || '');
+                              return (
+                                <td
+                                  className={`${className} ${isEditable ? "cursor-text hover:bg-blue-50" : ""}`}
+                                  contentEditable={isEditing}
+                                  suppressContentEditableWarning
+                                  onClick={() =>
+                                    isEditable && handleCellClick(record, field)
                                   }
-                                }}
-                                style={cellStyle}
-                                title={isEditable && !isEditing ? "Click to edit" : ""}
-                              >
-                                {isEditing ? (
-                                  record.status
-                                ) : (
-                                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(record.status)}`}>
-                                    {record.status}
-                                  </span>
-                                )}
-                              </td>
-                            );
-                          })()}
-                          {renderEditableCell("description", record.description, "text-xs", 80)}
-                          {renderEditableCell("aboutCompany", record.aboutCompany || "-", "text-xs", 50)}
-                          {renderEditableCell("companyAddress", record.companyAddress || "-", "text-xs", 50)}
-                          {(() => {
-                            const isEditing = editingCell?.recordId === record.id && editingCell?.field === 'companyWebsite';
-                            const cellStyle = isEditing 
-                              ? { border: '3px solid #000000', outline: 'none', padding: '4px', backgroundColor: '#f5f5f5' } 
-                              : {};
-                            
-                            return (
-                              <td
-                                className={`text-xs ${isEditable ? 'cursor-text hover:bg-blue-50' : ''}`}
-                                contentEditable={isEditing}
-                                suppressContentEditableWarning
-                                onClick={() => isEditable && handleCellClick(record, 'companyWebsite')}
-                                onBlur={(e) => {
-                                  if (isEditing) {
-                                    handleInlineFieldChange('companyWebsite', e.currentTarget.textContent || '');
+                                  onBlur={(e) => {
+                                    if (isEditing) {
+                                      handleInlineFieldChange(
+                                        field,
+                                        e.currentTarget.textContent || "",
+                                      );
+                                    }
+                                  }}
+                                  style={cellStyle}
+                                  title={
+                                    truncateLength &&
+                                    typeof content === "string"
+                                      ? content
+                                      : isEditable && !isEditing
+                                        ? "Click to edit"
+                                        : ""
                                   }
-                                }}
-                                style={cellStyle}
-                                title={isEditable && !isEditing ? "Click to edit" : ""}
-                              >
-                                {isEditing ? (
-                                  record.companyWebsite || ""
-                                ) : record.companyWebsite ? (
-                                  <a
-                                    href={record.companyWebsite}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-blue-600 hover:underline"
-                                    onClick={(e) => { e.stopPropagation(); }}
-                                  >
-                                    {record.companyWebsite.length > 30 ? record.companyWebsite.substring(0, 30) + "..." : record.companyWebsite}
-                                  </a>
-                                ) : "-"}
-                              </td>
-                            );
-                          })()}
-                          {renderEditableCell("companyRelationship", record.companyRelationship || 3, "text-center")}
-                          {renderEditableCell("industryContactName", record.industryContactName || "-", "text-xs")}
-                          {renderEditableCell("industryContactMobile", record.industryContactMobile || "-", "text-xs")}
-                          {renderEditableCell("industryContactEmail", record.industryContactEmail || "-", "text-xs")}
-                          {renderEditableCell("institutionContactName", record.institutionContactName || "-", "text-xs")}
-                          {renderEditableCell("institutionContactMobile", record.institutionContactMobile || "-", "text-xs")}
-                          {renderEditableCell("institutionContactEmail", record.institutionContactEmail || "-", "text-xs")}
-                          {renderEditableCell("clubsAligned", record.clubsAligned || "-", "text-xs")}
-                          {renderEditableCell("sdgGoals", record.sdgGoals || "-", "text-xs")}
-                          {renderEditableCell("skillsTechnologies", record.skillsTechnologies || "-", "text-xs", 50)}
-                          {renderEditableCell("perStudentCost", record.perStudentCost || 0, "text-center")}
-                          {renderEditableCell("placementOpportunity", record.placementOpportunity || 0, "text-center")}
-                          {renderEditableCell("internshipOpportunity", record.internshipOpportunity || 0, "text-center")}
-                          {renderEditableCell("goingForRenewal", record.goingForRenewal || "No", "text-center")}
-                          {renderEditableCell("benefitsAchieved", record.benefitsAchieved || "-", "text-xs", 50)}
-                          {renderEditableCell("documentAvailability", record.documentAvailability || "Not Available", "text-xs")}
-                          <td className="text-xs text-center">
-                            {record.hodApprovalDoc ? (
-                              <button
-                                onClick={() => setViewingDocument({ url: record.hodApprovalDoc!, title: `HO Approval - ${record.companyName}` })}
-                                className="text-blue-600 hover:underline cursor-pointer"
-                              >
-                                View
-                              </button>
-                            ) : "-"}
-                          </td>
-                          <td className="text-xs text-center">
-                            {record.signedAgreementDoc ? (
-                              <button
-                                onClick={() => setViewingDocument({ url: record.signedAgreementDoc!, title: `Signed Agreement - ${record.companyName}` })}
-                                className="text-blue-600 hover:underline cursor-pointer"
-                              >
-                                View
-                              </button>
-                            ) : "-"}
-                          </td>
-                          <td className="text-xs">{record.createdByName}</td>
-                          <td>
-                            <div className="flex gap-1">
-                              {isEditable && (
-                                <>
-                                  <button
-                                    onClick={() => handleEdit(record)}
-                                    className="text-xs text-blue-600 hover:text-blue-800"
-                                  >
-                                    Form
-                                  </button>
-                                  <span className="text-[#d1d5db]">|</span>
-                                </>
-                              )}
-                              <button
-                                onClick={() => setViewingRecord(record)}
-                                className="text-xs text-blue-600 hover:text-blue-800"
-                              >
-                                View
-                              </button>
-                              {canDelete() && (
-                                <>
-                                  <span className="text-[#d1d5db]">|</span>
-                                  <button
-                                    onClick={() => handleDeleteRecord(record.id)}
-                                    className="text-xs text-red-600 hover:text-red-800"
-                                  >
-                                    Del
-                                  </button>
-                                </>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {filteredRecords.length === 0 && (
-                      <tr>
-                        <td
-                          colSpan={29}
-                          className="text-center py-8 text-[#6b7280]"
-                        >
-                          No records found. Click &quot;+ New Record&quot; to
-                          add your first eMoU.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                                >
+                                  {displayContent}
+                                </td>
+                              );
+                            };
 
-              {/* Summary Cards */}
-              <div className="grid grid-cols-4 gap-4 mt-6">
-                <div className="bg-white p-4 rounded-lg border border-[#d1d5db]">
-                  <div className="text-2xl font-semibold text-[#1f2937]">
-                    {stats.total}
-                  </div>
-                  <div className="text-xs text-[#6b7280] mt-1">Total eMoUs</div>
-                </div>
-                <div className="bg-white p-4 rounded-lg border border-[#d1d5db]">
-                  <div className="text-2xl font-semibold text-green-600">
-                    {stats.active}
-                  </div>
-                  <div className="text-xs text-[#6b7280] mt-1">Active</div>
-                </div>
-                <div className="bg-white p-4 rounded-lg border border-[#d1d5db]">
-                  <div className="text-2xl font-semibold text-orange-600">
-                    {stats.expiring}
-                  </div>
-                  <div className="text-xs text-[#6b7280] mt-1">
-                    Expiring Soon
-                  </div>
-                </div>
-                <div className="bg-white p-4 rounded-lg border border-[#d1d5db]">
-                  <div className="text-2xl font-semibold text-red-600">
-                    {stats.expired}
-                  </div>
-                  <div className="text-xs text-[#6b7280] mt-1">Expired</div>
-                </div>
-              </div>
+                            return (
+                              <tr key={record.id} className="hover:bg-gray-50">
+                                <td className="text-center text-xs text-[#6b7280]">
+                                  {globalIndex + 1}
+                                </td>
+                                <td className="font-medium text-[#2563eb] font-mono">
+                                  {record.id}
+                                </td>
+                                {renderEditableCell(
+                                  "companyName",
+                                  record.companyName,
+                                  "",
+                                )}
+                                {renderEditableCell(
+                                  "department",
+                                  record.department,
+                                  "",
+                                )}
+                                {renderEditableCell(
+                                  "scope",
+                                  record.scope || "National",
+                                  "text-center",
+                                )}
+                                {renderEditableCell(
+                                  "maintainedBy",
+                                  record.maintainedBy || "Departments",
+                                  "text-center",
+                                )}
+                                {(() => {
+                                  const isEditing =
+                                    editingCell?.recordId === record.id &&
+                                    editingCell?.field === "fromDate";
+                                  const cellStyle = isEditing
+                                    ? {
+                                        border: "3px solid #000000",
+                                        outline: "none",
+                                        padding: "0",
+                                        backgroundColor: "#f5f5f5",
+                                      }
+                                    : {};
+
+                                  // Convert dd.mm.yyyy to yyyy-mm-dd for date input
+                                  const convertToInputFormat = (
+                                    dateStr: string,
+                                  ) => {
+                                    if (!dateStr) return "";
+                                    const [day, month, year] =
+                                      dateStr.split(".");
+                                    return `${year}-${month}-${day}`;
+                                  };
+
+                                  return (
+                                    <td
+                                      className={`${isEditable ? "cursor-text hover:bg-blue-50" : ""}`}
+                                      onClick={() =>
+                                        isEditable &&
+                                        handleCellClick(record, "fromDate")
+                                      }
+                                      style={cellStyle}
+                                      title={
+                                        isEditable && !isEditing
+                                          ? "Click to edit"
+                                          : ""
+                                      }
+                                    >
+                                      {isEditing ? (
+                                        <input
+                                          type="date"
+                                          defaultValue={convertToInputFormat(
+                                            record.fromDate,
+                                          )}
+                                          onChange={(e) => {
+                                            const val = e.target.value;
+                                            if (val) {
+                                              const [year, month, day] =
+                                                val.split("-");
+                                              handleInlineFieldChange(
+                                                "fromDate",
+                                                `${day}.${month}.${year}`,
+                                              );
+                                            }
+                                          }}
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Enter") {
+                                              saveInlineEdit();
+                                            } else if (e.key === "Escape") {
+                                              cancelInlineEdit();
+                                            }
+                                          }}
+                                          autoFocus
+                                          className="w-full h-full px-1 py-1 text-xs border-0 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                                        />
+                                      ) : (
+                                        record.fromDate
+                                      )}
+                                    </td>
+                                  );
+                                })()}
+                                {(() => {
+                                  const isEditing =
+                                    editingCell?.recordId === record.id &&
+                                    editingCell?.field === "toDate";
+                                  const cellStyle = isEditing
+                                    ? {
+                                        border: "3px solid #000000",
+                                        outline: "none",
+                                        padding: "0",
+                                        backgroundColor: "#f5f5f5",
+                                      }
+                                    : {};
+
+                                  // Convert dd.mm.yyyy to yyyy-mm-dd for date input
+                                  const convertToInputFormat = (
+                                    dateStr: string,
+                                  ) => {
+                                    if (!dateStr) return "";
+                                    const [day, month, year] =
+                                      dateStr.split(".");
+                                    return `${year}-${month}-${day}`;
+                                  };
+
+                                  return (
+                                    <td
+                                      className={`${isEditable ? "cursor-text hover:bg-blue-50" : ""}`}
+                                      onClick={() =>
+                                        isEditable &&
+                                        handleCellClick(record, "toDate")
+                                      }
+                                      style={cellStyle}
+                                      title={
+                                        isEditable && !isEditing
+                                          ? "Click to edit"
+                                          : ""
+                                      }
+                                    >
+                                      {isEditing ? (
+                                        <input
+                                          type="date"
+                                          defaultValue={convertToInputFormat(
+                                            record.toDate,
+                                          )}
+                                          onChange={(e) => {
+                                            const val = e.target.value;
+                                            if (val) {
+                                              const [year, month, day] =
+                                                val.split("-");
+                                              handleInlineFieldChange(
+                                                "toDate",
+                                                `${day}.${month}.${year}`,
+                                              );
+                                            }
+                                          }}
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Enter") {
+                                              saveInlineEdit();
+                                            } else if (e.key === "Escape") {
+                                              cancelInlineEdit();
+                                            }
+                                          }}
+                                          autoFocus
+                                          className="w-full h-full px-1 py-1 text-xs border-0 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                                        />
+                                      ) : (
+                                        record.toDate
+                                      )}
+                                    </td>
+                                  );
+                                })()}
+                                {(() => {
+                                  const isEditing =
+                                    editingCell?.recordId === record.id &&
+                                    editingCell?.field === "status";
+                                  const cellStyle = isEditing
+                                    ? {
+                                        border: "3px solid #000000",
+                                        outline: "none",
+                                        padding: "4px",
+                                        backgroundColor: "#f5f5f5",
+                                      }
+                                    : {};
+
+                                  return (
+                                    <td
+                                      className={`${isEditable ? "cursor-text hover:bg-blue-50" : ""}`}
+                                      contentEditable={isEditing}
+                                      suppressContentEditableWarning
+                                      onClick={() =>
+                                        isEditable &&
+                                        handleCellClick(record, "status")
+                                      }
+                                      onBlur={(e) => {
+                                        if (isEditing) {
+                                          handleInlineFieldChange(
+                                            "status",
+                                            e.currentTarget.textContent || "",
+                                          );
+                                        }
+                                      }}
+                                      style={cellStyle}
+                                      title={
+                                        isEditable && !isEditing
+                                          ? "Click to edit"
+                                          : ""
+                                      }
+                                    >
+                                      {isEditing ? (
+                                        record.status
+                                      ) : (
+                                        <span
+                                          className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(record.status)}`}
+                                        >
+                                          {record.status}
+                                        </span>
+                                      )}
+                                    </td>
+                                  );
+                                })()}
+                                {renderEditableCell(
+                                  "description",
+                                  record.description,
+                                  "text-xs",
+                                  80,
+                                )}
+                                {renderEditableCell(
+                                  "aboutCompany",
+                                  record.aboutCompany || "-",
+                                  "text-xs",
+                                  50,
+                                )}
+                                {renderEditableCell(
+                                  "companyAddress",
+                                  record.companyAddress || "-",
+                                  "text-xs",
+                                  50,
+                                )}
+                                {(() => {
+                                  const isEditing =
+                                    editingCell?.recordId === record.id &&
+                                    editingCell?.field === "companyWebsite";
+                                  const cellStyle = isEditing
+                                    ? {
+                                        border: "3px solid #000000",
+                                        outline: "none",
+                                        padding: "4px",
+                                        backgroundColor: "#f5f5f5",
+                                      }
+                                    : {};
+
+                                  return (
+                                    <td
+                                      className={`text-xs ${isEditable ? "cursor-text hover:bg-blue-50" : ""}`}
+                                      contentEditable={isEditing}
+                                      suppressContentEditableWarning
+                                      onClick={() =>
+                                        isEditable &&
+                                        handleCellClick(
+                                          record,
+                                          "companyWebsite",
+                                        )
+                                      }
+                                      onBlur={(e) => {
+                                        if (isEditing) {
+                                          handleInlineFieldChange(
+                                            "companyWebsite",
+                                            e.currentTarget.textContent || "",
+                                          );
+                                        }
+                                      }}
+                                      style={cellStyle}
+                                      title={
+                                        isEditable && !isEditing
+                                          ? "Click to edit"
+                                          : ""
+                                      }
+                                    >
+                                      {isEditing ? (
+                                        record.companyWebsite || ""
+                                      ) : record.companyWebsite ? (
+                                        <a
+                                          href={record.companyWebsite}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-blue-600 hover:underline"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                          }}
+                                        >
+                                          {record.companyWebsite.length > 30
+                                            ? record.companyWebsite.substring(
+                                                0,
+                                                30,
+                                              ) + "..."
+                                            : record.companyWebsite}
+                                        </a>
+                                      ) : (
+                                        "-"
+                                      )}
+                                    </td>
+                                  );
+                                })()}
+                                {renderEditableCell(
+                                  "companyRelationship",
+                                  record.companyRelationship || 3,
+                                  "text-center",
+                                )}
+                                {renderEditableCell(
+                                  "industryContactName",
+                                  record.industryContactName || "-",
+                                  "text-xs",
+                                )}
+                                {renderEditableCell(
+                                  "industryContactMobile",
+                                  record.industryContactMobile || "-",
+                                  "text-xs",
+                                )}
+                                {renderEditableCell(
+                                  "industryContactEmail",
+                                  record.industryContactEmail || "-",
+                                  "text-xs",
+                                )}
+                                {renderEditableCell(
+                                  "institutionContactName",
+                                  record.institutionContactName || "-",
+                                  "text-xs",
+                                )}
+                                {renderEditableCell(
+                                  "institutionContactMobile",
+                                  record.institutionContactMobile || "-",
+                                  "text-xs",
+                                )}
+                                {renderEditableCell(
+                                  "institutionContactEmail",
+                                  record.institutionContactEmail || "-",
+                                  "text-xs",
+                                )}
+                                {renderEditableCell(
+                                  "clubsAligned",
+                                  record.clubsAligned || "-",
+                                  "text-xs",
+                                )}
+                                {renderEditableCell(
+                                  "sdgGoals",
+                                  record.sdgGoals || "-",
+                                  "text-xs",
+                                )}
+                                {renderEditableCell(
+                                  "skillsTechnologies",
+                                  record.skillsTechnologies || "-",
+                                  "text-xs",
+                                  50,
+                                )}
+                                {renderEditableCell(
+                                  "perStudentCost",
+                                  record.perStudentCost || 0,
+                                  "text-center",
+                                )}
+                                {renderEditableCell(
+                                  "placementOpportunity",
+                                  record.placementOpportunity || 0,
+                                  "text-center",
+                                )}
+                                {renderEditableCell(
+                                  "internshipOpportunity",
+                                  record.internshipOpportunity || 0,
+                                  "text-center",
+                                )}
+                                {renderEditableCell(
+                                  "goingForRenewal",
+                                  record.goingForRenewal || "No",
+                                  "text-center",
+                                )}
+                                {renderEditableCell(
+                                  "benefitsAchieved",
+                                  record.benefitsAchieved || "-",
+                                  "text-xs",
+                                  50,
+                                )}
+                                {renderEditableCell(
+                                  "documentAvailability",
+                                  record.documentAvailability ||
+                                    "Not Available",
+                                  "text-xs",
+                                )}
+                                <td className="text-xs text-center">
+                                  <div className="flex gap-1 items-center justify-center">
+                                    {record.hodApprovalDoc && (
+                                      <button
+                                        onClick={() =>
+                                          setViewingDocument({
+                                            url: record.hodApprovalDoc!,
+                                            title: `HO Approval - ${record.companyName}`,
+                                          })
+                                        }
+                                        className="text-blue-600 hover:underline cursor-pointer"
+                                      >
+                                        View
+                                      </button>
+                                    )}
+                                    {user?.role === "admin" && (
+                                      <>
+                                        {record.hodApprovalDoc && (
+                                          <span className="text-gray-300">
+                                            |
+                                          </span>
+                                        )}
+                                        <label className="cursor-pointer text-green-600 hover:text-green-800 relative">
+                                          {uploadingDoc?.recordId ===
+                                            record.id &&
+                                          uploadingDoc?.field ===
+                                            "hodApprovalDoc" ? (
+                                            <span className="text-xs">
+                                              Uploading...
+                                            </span>
+                                          ) : (
+                                            <span className="text-xs">
+                                              {record.hodApprovalDoc
+                                                ? "Replace"
+                                                : "Upload"}
+                                            </span>
+                                          )}
+                                          <input
+                                            type="file"
+                                            accept=".pdf,.doc,.docx,image/*"
+                                            onChange={(e) => {
+                                              const file = e.target.files?.[0];
+                                              if (file) {
+                                                handleFileUpload(
+                                                  record.id,
+                                                  "hodApprovalDoc",
+                                                  file,
+                                                );
+                                              }
+                                              e.target.value = "";
+                                            }}
+                                            disabled={
+                                              uploadingDoc?.recordId ===
+                                                record.id &&
+                                              uploadingDoc?.field ===
+                                                "hodApprovalDoc"
+                                            }
+                                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                            onClick={(e) => e.stopPropagation()}
+                                          />
+                                        </label>
+                                      </>
+                                    )}
+                                    {!record.hodApprovalDoc &&
+                                      user?.role !== "admin" &&
+                                      "-"}
+                                  </div>
+                                </td>
+                                <td className="text-xs text-center">
+                                  <div className="flex gap-1 items-center justify-center">
+                                    {record.signedAgreementDoc && (
+                                      <button
+                                        onClick={() =>
+                                          setViewingDocument({
+                                            url: record.signedAgreementDoc!,
+                                            title: `Signed Agreement - ${record.companyName}`,
+                                          })
+                                        }
+                                        className="text-blue-600 hover:underline cursor-pointer"
+                                      >
+                                        View
+                                      </button>
+                                    )}
+                                    {user?.role === "admin" && (
+                                      <>
+                                        {record.signedAgreementDoc && (
+                                          <span className="text-gray-300">
+                                            |
+                                          </span>
+                                        )}
+                                        <label className="cursor-pointer text-green-600 hover:text-green-800 relative">
+                                          {uploadingDoc?.recordId ===
+                                            record.id &&
+                                          uploadingDoc?.field ===
+                                            "signedAgreementDoc" ? (
+                                            <span className="text-xs">
+                                              Uploading...
+                                            </span>
+                                          ) : (
+                                            <span className="text-xs">
+                                              {record.signedAgreementDoc
+                                                ? "Replace"
+                                                : "Upload"}
+                                            </span>
+                                          )}
+                                          <input
+                                            type="file"
+                                            accept=".pdf,.doc,.docx,image/*"
+                                            onChange={(e) => {
+                                              const file = e.target.files?.[0];
+                                              if (file) {
+                                                handleFileUpload(
+                                                  record.id,
+                                                  "signedAgreementDoc",
+                                                  file,
+                                                );
+                                              }
+                                              e.target.value = "";
+                                            }}
+                                            disabled={
+                                              uploadingDoc?.recordId ===
+                                                record.id &&
+                                              uploadingDoc?.field ===
+                                                "signedAgreementDoc"
+                                            }
+                                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                            onClick={(e) => e.stopPropagation()}
+                                          />
+                                        </label>
+                                      </>
+                                    )}
+                                    {!record.signedAgreementDoc &&
+                                      user?.role !== "admin" &&
+                                      "-"}
+                                  </div>
+                                </td>
+                                <td className="text-xs">
+                                  {record.createdByName}
+                                </td>
+                                <td>
+                                  <div className="flex gap-1">
+                                    {isEditable && (
+                                      <>
+                                        <button
+                                          onClick={() => handleEdit(record)}
+                                          className="text-xs text-blue-600 hover:text-blue-800"
+                                        >
+                                          Form
+                                        </button>
+                                        <span className="text-[#d1d5db]">
+                                          |
+                                        </span>
+                                      </>
+                                    )}
+                                    <button
+                                      onClick={() => setViewingRecord(record)}
+                                      className="text-xs text-blue-600 hover:text-blue-800"
+                                    >
+                                      View
+                                    </button>
+                                    {canDelete() && (
+                                      <>
+                                        <span className="text-[#d1d5db]">
+                                          |
+                                        </span>
+                                        <button
+                                          onClick={() =>
+                                            handleDeleteRecord(record.id)
+                                          }
+                                          className="text-xs text-red-600 hover:text-red-800"
+                                        >
+                                          Del
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          {paginatedRecords.length === 0 && (
+                            <tr>
+                              <td
+                                colSpan={33}
+                                className="text-center py-8 text-[#6b7280]"
+                              >
+                                No records found. Click &quot;+ New Record&quot;
+                                to add your first eMoU.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                );
+              })()}
             </>
           )}
         </div>
