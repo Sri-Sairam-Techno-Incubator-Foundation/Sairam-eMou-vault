@@ -11,6 +11,10 @@ import {
   Timestamp,
   QueryConstraint,
   setDoc,
+  limit,
+  startAfter,
+  getCountFromServer,
+  DocumentSnapshot,
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { EMoURecord, User, DepartmentCode, FilterOptions } from '@/types';
@@ -164,6 +168,157 @@ export async function getEMoUs(filters?: FilterOptions): Promise<EMoURecord[]> {
       updatedAt: data.updatedAt?.toDate(),
     } as EMoURecord;
   });
+}
+
+// Paginated result interface
+export interface PaginatedResult<T> {
+  data: T[];
+  totalCount: number;
+  hasMore: boolean;
+  lastDoc: DocumentSnapshot | null;
+}
+
+// Pagination options interface
+export interface PaginationOptions {
+  pageSize: number;
+  lastDoc?: DocumentSnapshot | null;
+  approvalStatus?: 'draft' | 'pending' | 'approved' | 'rejected';
+}
+
+// Get total count of eMoUs with filters
+export async function getEMoUsCount(filters?: FilterOptions, approvalStatus?: string): Promise<number> {
+  const constraints: QueryConstraint[] = [];
+  
+  if (filters?.department && filters.department !== 'all') {
+    constraints.push(where('department', '==', filters.department));
+  }
+  
+  if (filters?.status && filters.status !== 'all') {
+    constraints.push(where('status', '==', filters.status));
+  }
+  
+  if (approvalStatus) {
+    constraints.push(where('approvalStatus', '==', approvalStatus));
+  }
+  
+  const q = query(collection(db, EMOU_COLLECTION), ...constraints);
+  const snapshot = await getCountFromServer(q);
+  return snapshot.data().count;
+}
+
+// Get paginated eMoUs
+export async function getEMoUsPaginated(
+  filters?: FilterOptions,
+  pagination?: PaginationOptions
+): Promise<PaginatedResult<EMoURecord>> {
+  const constraints: QueryConstraint[] = [];
+  
+  if (filters?.department && filters.department !== 'all') {
+    constraints.push(where('department', '==', filters.department));
+  }
+  
+  if (filters?.status && filters.status !== 'all') {
+    constraints.push(where('status', '==', filters.status));
+  }
+  
+  if (pagination?.approvalStatus) {
+    constraints.push(where('approvalStatus', '==', pagination.approvalStatus));
+  }
+  
+  // Order by department first, then by createdAt for consistent pagination
+  constraints.push(orderBy('department', 'asc'));
+  constraints.push(orderBy('createdAt', 'desc'));
+  
+  // Apply cursor if provided
+  if (pagination?.lastDoc) {
+    constraints.push(startAfter(pagination.lastDoc));
+  }
+  
+  // Apply page size limit
+  const pageSize = pagination?.pageSize || 20;
+  constraints.push(limit(pageSize + 1)); // Fetch one extra to check if there's more
+  
+  const q = query(collection(db, EMOU_COLLECTION), ...constraints);
+  const querySnapshot = await getDocs(q);
+  
+  const docs = querySnapshot.docs;
+  const hasMore = docs.length > pageSize;
+  const resultDocs = hasMore ? docs.slice(0, pageSize) : docs;
+  
+  const data = resultDocs.map(doc => {
+    const docData = doc.data();
+    return {
+      ...docData,
+      createdAt: docData.createdAt.toDate(),
+      updatedAt: docData.updatedAt?.toDate(),
+    } as EMoURecord;
+  });
+  
+  // Get total count
+  const totalCount = await getEMoUsCount(filters, pagination?.approvalStatus);
+  
+  return {
+    data,
+    totalCount,
+    hasMore,
+    lastDoc: resultDocs.length > 0 ? resultDocs[resultDocs.length - 1] : null,
+  };
+}
+
+// Get eMoUs for a specific page (offset-based pagination)
+export async function getEMoUsPage(
+  page: number,
+  pageSize: number,
+  filters?: FilterOptions,
+  approvalStatus?: 'draft' | 'pending' | 'approved' | 'rejected'
+): Promise<{ data: EMoURecord[]; totalCount: number; totalPages: number }> {
+  const constraints: QueryConstraint[] = [];
+  
+  if (filters?.department && filters.department !== 'all') {
+    constraints.push(where('department', '==', filters.department));
+  }
+  
+  if (filters?.status && filters.status !== 'all') {
+    constraints.push(where('status', '==', filters.status));
+  }
+  
+  if (approvalStatus) {
+    constraints.push(where('approvalStatus', '==', approvalStatus));
+  }
+  
+  // Order by department first for sorting, then by createdAt
+  constraints.push(orderBy('department', 'asc'));
+  constraints.push(orderBy('createdAt', 'desc'));
+  
+  // Get total count first
+  const totalCount = await getEMoUsCount(filters, approvalStatus);
+  const totalPages = Math.ceil(totalCount / pageSize);
+  
+  // For offset-based pagination, we need to skip records
+  // Firestore doesn't have offset, so we fetch all and slice (not ideal for large datasets)
+  // Alternative: use cursor-based pagination with cached cursors
+  const q = query(collection(db, EMOU_COLLECTION), ...constraints);
+  const querySnapshot = await getDocs(q);
+  
+  const allDocs = querySnapshot.docs;
+  const startIndex = (page - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
+  const pageDocs = allDocs.slice(startIndex, endIndex);
+  
+  const data = pageDocs.map(doc => {
+    const docData = doc.data();
+    return {
+      ...docData,
+      createdAt: docData.createdAt.toDate(),
+      updatedAt: docData.updatedAt?.toDate(),
+    } as EMoURecord;
+  });
+  
+  return {
+    data,
+    totalCount,
+    totalPages,
+  };
 }
 
 // User CRUD Operations
