@@ -7,7 +7,13 @@ import Alert from "@/components/Alert";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import DocumentViewer from "@/components/DocumentViewer";
 import ViewRecordDialog from "@/components/ViewRecordDialog";
-import { User, UserRole, DepartmentCode, EMoURecord } from "@/types";
+import {
+  User,
+  UserRole,
+  DepartmentCode,
+  EMoURecord,
+  EMoUStatus,
+} from "@/types";
 import { getAllUsers, getEMoUs, updateEMoU } from "@/lib/firestore";
 import { uploadToCloudinary } from "@/lib/cloudinary";
 import { useRouter } from "next/navigation";
@@ -541,6 +547,16 @@ function AdminPage() {
     }
   };
 
+  const getDisplayStatus = (status: EMoUStatus | string): EMoUStatus => {
+    if (
+      typeof status === "string" &&
+      (status === "file chosen" || status === "file chosen")
+    ) {
+      return "Draft";
+    }
+    return status as EMoUStatus;
+  };
+
   // Render comprehensive table with all fields
   const renderRecordTable = (
     records: EMoURecord[],
@@ -571,6 +587,14 @@ function AdminPage() {
         content.length > truncateLength
       ) {
         displayContent = content.substring(0, truncateLength) + "...";
+      }
+
+      // Filter out invalid placeholder values
+      if (
+        displayContent === "file chosen" ||
+        displayContent === "file chosen"
+      ) {
+        displayContent = "";
       }
 
       return (
@@ -714,6 +738,9 @@ function AdminPage() {
                           </option>
                         ))}
                       </select>
+                    ) : (record[field] as string) === "file chosen" ||
+                      (record[field] as string) === "file chosen" ? (
+                      defaultValue
                     ) : (
                       (record[field] as string) || defaultValue
                     )}
@@ -750,7 +777,12 @@ function AdminPage() {
                     {isEditing ? (
                       <input
                         type="date"
-                        defaultValue={convertToInputFormat(record[field])}
+                        defaultValue={convertToInputFormat(
+                          record[field] === "file chosen" ||
+                            record[field] === "file chosen"
+                            ? ""
+                            : record[field],
+                        )}
                         onChange={(e) => {
                           const val = e.target.value;
                           if (val) {
@@ -771,6 +803,9 @@ function AdminPage() {
                         autoFocus
                         className="w-full h-full px-1 py-1 text-xs border-0 focus:outline-none focus:ring-2 focus:ring-blue-400"
                       />
+                    ) : record[field] === "file chosen" ||
+                      record[field] === "file chosen" ? (
+                      ""
                     ) : (
                       record[field]
                     )}
@@ -839,7 +874,10 @@ function AdminPage() {
                       >
                         {isEditing ? (
                           <select
-                            value={inlineEditData.status || record.status}
+                            value={
+                              inlineEditData.status ||
+                              getDisplayStatus(record.status)
+                            }
                             onChange={(e) =>
                               handleInlineFieldChange("status", e.target.value)
                             }
@@ -860,9 +898,11 @@ function AdminPage() {
                           </select>
                         ) : (
                           <span
-                            className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(record.status)}`}
+                            className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(
+                              getDisplayStatus(record.status),
+                            )}`}
                           >
-                            {record.status}
+                            {getDisplayStatus(record.status)}
                           </span>
                         )}
                       </td>
@@ -1066,7 +1106,7 @@ function AdminPage() {
                       {record.hodApprovalDoc && (
                         <span className="text-gray-300">|</span>
                       )}
-                      <label className="cursor-pointer px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors flex items-center gap-1 text-xs">
+                      <label className="relative cursor-pointer px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors flex items-center gap-1 text-xs">
                         {uploadingDoc?.recordId === record.id &&
                         uploadingDoc?.field === "hodApprovalDoc" ? (
                           <span className="flex items-center gap-1">
@@ -1122,7 +1162,7 @@ function AdminPage() {
                       {record.signedAgreementDoc && (
                         <span className="text-gray-300">|</span>
                       )}
-                      <label className="cursor-pointer px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors flex items-center gap-1 text-xs">
+                      <label className="relative cursor-pointer px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors flex items-center gap-1 text-xs">
                         {uploadingDoc?.recordId === record.id &&
                         uploadingDoc?.field === "signedAgreementDoc" ? (
                           <span className="flex items-center gap-1">
