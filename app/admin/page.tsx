@@ -162,12 +162,38 @@ function AdminPage() {
 
       if (searchTerm) {
         const term = searchTerm.toLowerCase();
-        filtered = filtered.filter(
-          (r) =>
-            r.companyName.toLowerCase().includes(term) ||
-            r.description.toLowerCase().includes(term) ||
-            r.id.toLowerCase().includes(term),
-        );
+        filtered = filtered.filter((r) => {
+          const searchableFields = [
+            r.id,
+            r.companyName,
+            r.department,
+            r.description,
+            r.fromDate,
+            r.toDate,
+            r.status,
+            r.scope,
+            r.maintainedBy,
+            r.aboutCompany,
+            r.companyAddress,
+            r.companyWebsite,
+            r.industryContactName,
+            r.industryContactMobile,
+            r.industryContactEmail,
+            r.institutionContactName,
+            r.institutionContactMobile,
+            r.institutionContactEmail,
+            r.clubsAligned,
+            r.sdgGoals,
+            r.skillsTechnologies,
+            r.benefitsAchieved,
+            r.goingForRenewal,
+            r.documentAvailability,
+            r.createdByName,
+          ];
+          return searchableFields.some(
+            (field) => field && String(field).toLowerCase().includes(term),
+          );
+        });
       }
 
       setPendingRecords(filtered.filter((r) => r.approvalStatus === "pending"));
@@ -216,7 +242,36 @@ function AdminPage() {
     field: keyof EMoURecord,
     value: string | number,
   ) => {
-    setInlineEditData((prev) => ({ ...prev, [field]: value }));
+    setInlineEditData((prev) => {
+      const updates: Partial<EMoURecord> = { [field]: value };
+
+      // Auto-update status when toDate changes
+      if (field === "toDate" && typeof value === "string") {
+        const dateStr = value.toLowerCase();
+        if (dateStr === "perpetual" || dateStr === "indefinite") {
+          updates.status = "Active" as EMoUStatus;
+        } else {
+          // Parse DD.MM.YYYY format
+          const parts = value.split(".");
+          if (parts.length === 3) {
+            const day = parseInt(parts[0], 10);
+            const month = parseInt(parts[1], 10) - 1; // Month is 0-indexed
+            const year = parseInt(parts[2], 10);
+            const toDate = new Date(year, month, day);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            if (toDate >= today) {
+              updates.status = "Active" as EMoUStatus;
+            } else {
+              updates.status = "Expired" as EMoUStatus;
+            }
+          }
+        }
+      }
+
+      return { ...prev, ...updates };
+    });
   };
 
   const saveInlineEdit = async () => {
@@ -548,10 +603,7 @@ function AdminPage() {
   };
 
   const getDisplayStatus = (status: EMoUStatus | string): EMoUStatus => {
-    if (
-      typeof status === "string" &&
-      (status === "file chosen" || status === "file chosen")
-    ) {
+    if (typeof status === "string" && status === "file chosen") {
       return "Draft";
     }
     return status as EMoUStatus;
@@ -827,12 +879,7 @@ function AdminPage() {
                     record.companyName,
                     "",
                   )}
-                  {renderEditableCell(
-                    record,
-                    "department",
-                    record.department,
-                    "",
-                  )}
+                  <td className="text-xs">{record.department}</td>
                   {renderSelectCell(
                     "scope",
                     [

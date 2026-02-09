@@ -51,7 +51,6 @@ function HomePage() {
     onConfirm: () => void;
   } | null>(null);
   const [viewingRecord, setViewingRecord] = useState<EMoURecord | null>(null);
-  const [inlineEditingId, setInlineEditingId] = useState<string | null>(null);
   const [inlineEditData, setInlineEditData] = useState<Partial<EMoURecord>>({});
   const [editingCell, setEditingCell] = useState<{
     recordId: string;
@@ -60,10 +59,6 @@ function HomePage() {
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [scrollStart, setScrollStart] = useState({ left: 0, top: 0 });
-  const [showAddButton, setShowAddButton] = useState(false);
-  const [creatingNewRecord, setCreatingNewRecord] = useState(false);
-  const [newRecordData, setNewRecordData] = useState<Partial<EMoURecord>>({});
-  const [editingNewCell, setEditingNewCell] = useState<string | null>(null);
   const [viewingDocument, setViewingDocument] = useState<{
     url: string;
     title: string;
@@ -162,6 +157,7 @@ function HomePage() {
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingCell, inlineEditData, user]);
 
   const loadRecords = async () => {
@@ -175,9 +171,11 @@ function HomePage() {
         filters.department = selectedDepartment as FilterOptions["department"];
       }
 
-      // Special handling for "Expiring" - fetch Active records and filter client-side
+      // Special handling for "Expiring" and "With Docs" - these need client-side filtering
       if (selectedStatus === "Expiring") {
         filters.status = "Active";
+      } else if (selectedStatus === "With Docs") {
+        // Don't filter by status - we'll filter by document presence client-side
       } else if (selectedStatus !== "all") {
         filters.status = selectedStatus as FilterOptions["status"];
       }
@@ -198,15 +196,41 @@ function HomePage() {
 
       let data = result.data;
 
-      // Client-side search filtering (Firestore doesn't support full-text search)
+      // Client-side search filtering (global across all fields)
       if (debouncedSearchTerm) {
         const term = debouncedSearchTerm.toLowerCase();
-        data = data.filter(
-          (r) =>
-            r.companyName.toLowerCase().includes(term) ||
-            r.description.toLowerCase().includes(term) ||
-            r.id.toLowerCase().includes(term),
-        );
+        data = data.filter((r) => {
+          const searchableFields = [
+            r.id,
+            r.companyName,
+            r.department,
+            r.description,
+            r.fromDate,
+            r.toDate,
+            r.status,
+            r.scope,
+            r.maintainedBy,
+            r.aboutCompany,
+            r.companyAddress,
+            r.companyWebsite,
+            r.industryContactName,
+            r.industryContactMobile,
+            r.industryContactEmail,
+            r.institutionContactName,
+            r.institutionContactMobile,
+            r.institutionContactEmail,
+            r.clubsAligned,
+            r.sdgGoals,
+            r.skillsTechnologies,
+            r.benefitsAchieved,
+            r.goingForRenewal,
+            r.documentAvailability,
+            r.createdByName,
+          ];
+          return searchableFields.some(
+            (field) => field && String(field).toLowerCase().includes(term),
+          );
+        });
       }
 
       // Filter for expiring records (within 2 months)
@@ -232,7 +256,7 @@ function HomePage() {
 
             // Record is expiring if toDate is between today and 2 months from now
             return toDate > today && toDate <= twoMonthsFromNow;
-          } catch (e) {
+          } catch {
             return false;
           }
         });
@@ -361,12 +385,33 @@ function HomePage() {
 
             // Record is expiring if toDate is between today and 2 months from now
             return toDate > today && toDate <= twoMonthsFromNow;
-          } catch (e) {
+          } catch {
             return false;
           }
         }).length;
       } catch (error) {
         console.error("Failed to calculate expiring records:", error);
+      }
+
+      // Calculate withDocs count from all approved records
+      let withDocsCount = 0;
+      try {
+        const allApprovedFilters: FilterOptions = {};
+        if (selectedDepartment !== "all") {
+          allApprovedFilters.department =
+            selectedDepartment as FilterOptions["department"];
+        }
+        const allApproved = await getEMoUsPage(
+          1,
+          10000,
+          allApprovedFilters,
+          approvalStatus,
+        );
+        withDocsCount = allApproved.data.filter(
+          (r) => r.hodApprovalDoc || r.signedAgreementDoc,
+        ).length;
+      } catch (error) {
+        console.error("Failed to calculate withDocs count:", error);
       }
 
       setStats({
@@ -376,7 +421,7 @@ function HomePage() {
         expired,
         draft,
         renewal,
-        withDocs: 0, // This requires checking document fields, keeping simplified
+        withDocs: withDocsCount,
       });
     } catch (error) {
       console.error("Failed to load stats:", error);
@@ -517,10 +562,6 @@ function HomePage() {
     setShowForm(true);
   };
 
-  const handleDoubleClick = (record: EMoURecord) => {
-    // Deprecated - using single click on cells now
-  };
-
   const handleCellClick = (record: EMoURecord, field: keyof EMoURecord) => {
     if (
       canEdit(record.createdBy, record.department) &&
@@ -538,7 +579,34 @@ function HomePage() {
     field: keyof EMoURecord,
     value: string | number,
   ) => {
-    setInlineEditData((prev) => ({ ...prev, [field]: value }));
+    setInlineEditData((prev) => {
+      const updated = { ...prev, [field]: value };
+      
+      // Auto-update status when toDate changes
+      if (field === "toDate" && typeof value === "string") {
+        if (value.toLowerCase().includes("perpetual") || value.toLowerCase().includes("indefinite")) {
+          updated.status = "Active";
+        } else {
+          try {
+            const [day, month, year] = value.split(".").map(Number);
+            const toDate = new Date(year, month - 1, day);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            toDate.setHours(0, 0, 0, 0);
+            
+            if (toDate >= today) {
+              updated.status = "Active";
+            } else {
+              updated.status = "Expired";
+            }
+          } catch {
+            // Keep current status if date parsing fails
+          }
+        }
+      }
+      
+      return updated;
+    });
   };
 
   const saveInlineEdit = async () => {
@@ -574,83 +642,6 @@ function HomePage() {
   const cancelInlineEdit = () => {
     setEditingCell(null);
     setInlineEditData({});
-  };
-
-  const handleNewRecordFieldChange = (
-    field: string,
-    value: string | number,
-  ) => {
-    setNewRecordData({ ...newRecordData, [field]: value });
-  };
-
-  const saveNewRecord = async (data: Partial<EMoURecord>) => {
-    if (!user) return;
-
-    // Validate required fields
-    if (!data.companyName || !data.department) {
-      setAlert({
-        message: "Company Name and Department are required!",
-        type: "error",
-      });
-      return;
-    }
-
-    try {
-      const now = new Date();
-      const recordData = {
-        department: data.department,
-        companyName: data.companyName,
-        fromDate: data.fromDate || "",
-        toDate: data.toDate || "",
-        scope: data.scope || "National",
-        maintainedBy: data.maintainedBy || "Departments",
-        approvalStatus:
-          data.hodApprovalDoc && data.signedAgreementDoc ? "pending" : "draft",
-        status: data.status || "Draft",
-        description: data.description || "",
-        documentAvailability: data.documentAvailability || "Not Available",
-        hodApprovalDoc: data.hodApprovalDoc,
-        signedAgreementDoc: data.signedAgreementDoc,
-        goingForRenewal: data.goingForRenewal || "No",
-        perStudentCost: data.perStudentCost || 0,
-        placementOpportunity: data.placementOpportunity || 0,
-        internshipOpportunity: data.internshipOpportunity || 0,
-        companyRelationship: (data.companyRelationship || 3) as
-          | 1
-          | 2
-          | 3
-          | 4
-          | 5,
-        aboutCompany: data.aboutCompany,
-        companyAddress: data.companyAddress,
-        companyWebsite: data.companyWebsite,
-        industryContactName: data.industryContactName,
-        industryContactMobile: data.industryContactMobile,
-        industryContactEmail: data.industryContactEmail,
-        institutionContactName: data.institutionContactName,
-        institutionContactMobile: data.institutionContactMobile,
-        institutionContactEmail: data.institutionContactEmail,
-        clubsAligned: data.clubsAligned,
-        sdgGoals: data.sdgGoals,
-        skillsTechnologies: data.skillsTechnologies,
-        benefitsAchieved: data.benefitsAchieved,
-        scannedCopy: data.scannedCopy,
-        createdBy: user.uid,
-        createdByName: user.displayName,
-        createdAt: now,
-      };
-
-      await createEMoU(recordData as Omit<EMoURecord, "id">);
-
-      setCreatingNewRecord(false);
-      setNewRecordData({});
-      setEditingNewCell(null);
-      loadRecords();
-      setAlert({ message: "Record created successfully!", type: "success" });
-    } catch (error) {
-      console.error("Failed to create record:", error);
-      setAlert({ message: "Failed to create record", type: "error" });
-    }
   };
 
   const handleExport = async () => {
@@ -1164,11 +1155,7 @@ function HomePage() {
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
-                onMouseLeave={() => {
-                  handleMouseLeave();
-                  setShowAddButton(false);
-                }}
-                onMouseEnter={() => setShowAddButton(true)}
+                onMouseLeave={handleMouseLeave}
               >
                 <style jsx>{`
                   .sheet-table td {
@@ -1258,6 +1245,11 @@ function HomePage() {
                           displayContent =
                             content.substring(0, truncateLength) + "...";
                         }
+                        
+                        // Filter out invalid placeholder values
+                        if (displayContent === "file chosen") {
+                          displayContent = "";
+                        }
 
                         return (
                           <td
@@ -1302,11 +1294,9 @@ function HomePage() {
                             record.companyName,
                             "",
                           )}
-                          {renderEditableCell(
-                            "department",
-                            record.department,
-                            "",
-                          )}
+                          <td className="text-xs">
+                            {record.department}
+                          </td>
                           {(() => {
                             const isEditing =
                               editingCell?.recordId === record.id &&
@@ -1469,7 +1459,7 @@ function HomePage() {
                                   <input
                                     type="date"
                                     defaultValue={convertToInputFormat(
-                                      record.fromDate,
+                                      record.fromDate === "file chosen" ? "" : record.fromDate,
                                     )}
                                     onChange={(e) => {
                                       const val = e.target.value;
@@ -1493,7 +1483,7 @@ function HomePage() {
                                     className="w-full h-full px-1 py-1 text-xs border-0 focus:outline-none focus:ring-2 focus:ring-blue-400"
                                   />
                                 ) : (
-                                  record.fromDate
+                                  record.fromDate === "file chosen" ? "" : record.fromDate
                                 )}
                               </td>
                             );
@@ -1536,7 +1526,7 @@ function HomePage() {
                                   <input
                                     type="date"
                                     defaultValue={convertToInputFormat(
-                                      record.toDate,
+                                      record.toDate === "file chosen" ? "" : record.toDate,
                                     )}
                                     onChange={(e) => {
                                       const val = e.target.value;
@@ -1560,7 +1550,7 @@ function HomePage() {
                                     className="w-full h-full px-1 py-1 text-xs border-0 focus:outline-none focus:ring-2 focus:ring-blue-400"
                                   />
                                 ) : (
-                                  record.toDate
+                                  record.toDate === "file chosen" ? "" : record.toDate
                                 )}
                               </td>
                             );
@@ -1976,7 +1966,7 @@ function HomePage() {
                                   {record.hodApprovalDoc && (
                                     <span className="text-gray-300">|</span>
                                   )}
-                                  <label className="cursor-pointer px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors flex items-center gap-1 text-xs">
+                                  <label className="relative cursor-pointer px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors flex items-center gap-1 text-xs">
                                     {uploadingDoc?.recordId === record.id &&
                                     uploadingDoc?.field === "hodApprovalDoc" ? (
                                       <span className="flex items-center gap-1">
@@ -2040,7 +2030,7 @@ function HomePage() {
                                   {record.signedAgreementDoc && (
                                     <span className="text-gray-300">|</span>
                                   )}
-                                  <label className="cursor-pointer px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors flex items-center gap-1 text-xs">
+                                  <label className="relative cursor-pointer px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors flex items-center gap-1 text-xs">
                                     {uploadingDoc?.recordId === record.id &&
                                     uploadingDoc?.field ===
                                       "signedAgreementDoc" ? (
