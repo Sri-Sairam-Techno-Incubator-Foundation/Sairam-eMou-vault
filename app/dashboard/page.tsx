@@ -178,8 +178,7 @@ export default function Dashboard() {
     active: records.filter((r) => getDisplayStatus(r) === "Active").length,
     expiring: records.filter((r) => getDisplayStatus(r) === "Expiring").length,
     expired: records.filter((r) => getDisplayStatus(r) === "Expired").length,
-    renewal: records.filter((r) => getDisplayStatus(r) === "Renewal Pending")
-      .length,
+    renewal: records.filter((r) => r.goingForRenewal === "Yes").length,
     draft: records.filter((r) => getDisplayStatus(r) === "Draft").length,
     totalPlacement: records.reduce(
       (sum, r) => sum + (r.placementOpportunity || 0),
@@ -252,8 +251,8 @@ export default function Dashboard() {
               if (status === "Active") yearData[year].active++;
               else if (status === "Expiring") yearData[year].expiring++;
               else if (status === "Expired") yearData[year].expired++;
-              else if (status === "Renewal Pending") yearData[year].renewal++;
-              else if (status === "Draft") yearData[year].draft++;
+              if (record.goingForRenewal === "Yes") yearData[year].renewal++;
+              if (status === "Draft") yearData[year].draft++;
             }
           }
         } catch (e) {
@@ -334,7 +333,7 @@ export default function Dashboard() {
                 if (status === "Active") monthData[monthKey].active++;
                 else if (status === "Expiring") monthData[monthKey].expiring++;
                 else if (status === "Expired") monthData[monthKey].expired++;
-                else if (status === "Renewal Pending")
+                if (record.goingForRenewal === "Yes")
                   monthData[monthKey].renewal++;
               }
             }

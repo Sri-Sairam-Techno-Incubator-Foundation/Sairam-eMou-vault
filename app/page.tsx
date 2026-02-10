@@ -315,7 +315,7 @@ function HomePage() {
       const approvalStatus = "approved";
 
       // Get counts for different statuses
-      const [total, active, expired, draft, renewal] = await Promise.all([
+      const [total, active, expired, draft] = await Promise.all([
         getEMoUsCount(
           selectedDepartment !== "all"
             ? { department: selectedDepartment as FilterOptions["department"] }
@@ -349,16 +349,6 @@ function HomePage() {
                 ? (selectedDepartment as FilterOptions["department"])
                 : undefined,
             status: "Draft",
-          },
-          approvalStatus,
-        ),
-        getEMoUsCount(
-          {
-            department:
-              selectedDepartment !== "all"
-                ? (selectedDepartment as FilterOptions["department"])
-                : undefined,
-            status: "Renewal Pending",
           },
           approvalStatus,
         ),
@@ -419,8 +409,9 @@ function HomePage() {
         console.error("Failed to calculate expiring records:", error);
       }
 
-      // Calculate withDocs count from all approved records
+      // Calculate withDocs count and renewal count from all approved records
       let withDocsCount = 0;
+      let renewalCount = 0;
       try {
         const allApprovedFilters: FilterOptions = {};
         if (selectedDepartment !== "all") {
@@ -436,6 +427,9 @@ function HomePage() {
         withDocsCount = allApproved.data.filter(
           (r) => r.hodApprovalDoc || r.signedAgreementDoc,
         ).length;
+        renewalCount = allApproved.data.filter(
+          (r) => r.goingForRenewal === "Yes",
+        ).length;
       } catch (error) {
         console.error("Failed to calculate withDocs count:", error);
       }
@@ -446,7 +440,7 @@ function HomePage() {
         expiring: expiringCount,
         expired,
         draft,
-        renewal,
+        renewal: renewalCount,
         withDocs: withDocsCount,
       });
     } catch (error) {
