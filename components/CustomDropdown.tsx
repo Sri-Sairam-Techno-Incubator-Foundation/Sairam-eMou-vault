@@ -181,23 +181,19 @@ export default function CustomDropdown({
         onClick={handleToggle}
         className={`
           w-full flex items-center justify-between gap-2 px-3 py-2
-          bg-white border rounded-md shadow-sm
+          bg-white border border-black shadow-sm
           text-left text-sm
           transition-all duration-150
-          ${
-            isOpen
-              ? "border-blue-500 ring-2 ring-blue-200"
-              : "border-gray-300 hover:border-gray-400"
-          }
-          focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200
+          ${isOpen ? "border-2 ring-2 ring-black" : "border border-black hover:bg-neutral-100"}
+          focus:outline-none focus:border-black focus:ring-2 focus:ring-black
         `}
       >
-        <span className={selectedOption ? "text-gray-900" : "text-gray-500"}>
+        <span className={selectedOption ? "text-black" : "text-neutral-400"}>
           {selectedOption?.label || placeholder}
         </span>
         <FiChevronDown
           className={`
-            text-gray-400 transition-transform duration-200
+            text-black transition-transform duration-200
             ${isOpen ? "rotate-180" : ""}
           `}
           size={16}
@@ -210,7 +206,7 @@ export default function CustomDropdown({
           ref={optionsRef}
           className="
             absolute z-50 mt-1 w-full min-w-[160px]
-            bg-white border border-gray-200 rounded-md shadow-lg
+            bg-white border-2 border-black rounded-md shadow-xl
             max-h-60 overflow-auto
             transition-opacity duration-150
           "
@@ -228,20 +224,20 @@ export default function CustomDropdown({
                   flex items-center justify-between gap-2 px-3 py-2
                   cursor-pointer text-sm
                   transition-colors duration-75
-                  ${isHighlighted ? "bg-blue-50" : ""}
-                  ${isSelected ? "text-blue-600 font-medium" : "text-gray-700"}
-                  hover:bg-blue-50
+                  ${isHighlighted ? "bg-neutral-100" : ""}
+                  ${isSelected ? "text-black font-semibold" : "text-neutral-700"}
+                  hover:bg-neutral-200
                 `}
               >
                 <span>{option.label}</span>
                 {isSelected && (
-                  <FiCheck className="text-blue-600 flex-shrink-0" size={16} />
+                  <FiCheck className="text-black flex-shrink-0" size={16} />
                 )}
               </div>
             );
           })}
           {options.length === 0 && (
-            <div className="px-3 py-2 text-sm text-gray-500 italic">
+            <div className="px-3 py-2 text-sm text-neutral-400 italic">
               No options available
             </div>
           )}
@@ -359,13 +355,13 @@ export function CellDropdown({
         ref={optionsRef}
         className="
           absolute left-0 top-0 z-[100] min-w-[180px]
-          bg-white border-2 border-blue-500 rounded-lg shadow-xl
+          bg-white border-2 border-black rounded-lg shadow-xl
           max-h-[240px] overflow-auto
         "
       >
         {/* Header showing current selection */}
-        <div className="sticky top-0 bg-blue-50 border-b border-blue-200 px-3 py-2">
-          <span className="text-xs font-medium text-blue-700">
+        <div className="sticky top-0 bg-neutral-100 border-b border-black px-3 py-2">
+          <span className="text-xs font-medium text-black">
             {selectedOption?.label || placeholder || "Select option"}
           </span>
         </div>
@@ -383,14 +379,14 @@ export function CellDropdown({
                 flex items-center justify-between gap-2 px-3 py-2
                 cursor-pointer text-xs
                 transition-colors duration-75
-                ${isHighlighted ? "bg-blue-100" : ""}
-                ${isSelected ? "text-blue-700 font-semibold bg-blue-50" : "text-gray-700"}
-                hover:bg-blue-100
+                ${isHighlighted ? "bg-neutral-200" : ""}
+                ${isSelected ? "text-black font-semibold bg-neutral-100" : "text-neutral-700"}
+                hover:bg-neutral-200
               `}
             >
               <span>{option.label}</span>
               {isSelected && (
-                <FiCheck className="text-blue-600 flex-shrink-0" size={14} />
+                <FiCheck className="text-black flex-shrink-0" size={14} />
               )}
             </div>
           );
