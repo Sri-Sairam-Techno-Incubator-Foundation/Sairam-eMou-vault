@@ -17,7 +17,7 @@ import {
   deleteEMoU,
   getEMoUsCount,
 } from "@/lib/firestore";
-import { uploadToCloudinary } from "@/lib/cloudinary";
+import { uploadToCloudinary, deleteFromCloudinary } from "@/lib/cloudinary";
 import { useRouter } from "next/navigation";
 import {
   FiUpload,
@@ -30,7 +30,7 @@ import {
 import { MdDashboard, MdAdminPanelSettings } from "react-icons/md";
 
 function HomePage() {
-  const { user, signOut, canEdit, canDelete } = useAuth();
+  const { user, signOut, canEdit, canDelete, firebaseUser } = useAuth();
   const router = useRouter();
   const [records, setRecords] = useState<EMoURecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -93,6 +93,16 @@ function HomePage() {
     "IT",
     "AIDS",
     "CSBS",
+    "E&I",
+    "MECHATRONICS",
+    "CCE",
+    "AIML",
+    "CYBERSECURITY",
+    "IOT",
+    "EICE",
+    "CSE MTECH",
+    "Incubation",
+    "Institution",
   ];
 
   useEffect(() => {
@@ -581,10 +591,13 @@ function HomePage() {
   ) => {
     setInlineEditData((prev) => {
       const updated = { ...prev, [field]: value };
-      
+
       // Auto-update status when toDate changes
       if (field === "toDate" && typeof value === "string") {
-        if (value.toLowerCase().includes("perpetual") || value.toLowerCase().includes("indefinite")) {
+        if (
+          value.toLowerCase().includes("perpetual") ||
+          value.toLowerCase().includes("indefinite")
+        ) {
           updated.status = "Active";
         } else {
           try {
@@ -593,7 +606,7 @@ function HomePage() {
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             toDate.setHours(0, 0, 0, 0);
-            
+
             if (toDate >= today) {
               updated.status = "Active";
             } else {
@@ -604,7 +617,7 @@ function HomePage() {
           }
         }
       }
-      
+
       return updated;
     });
   };
@@ -623,6 +636,82 @@ function HomePage() {
       await updateEMoU(editingCell.recordId, updatedData);
 
       // Update local state instead of reloading from database
+      setRecords((prevRecords) =>
+        prevRecords.map((record) =>
+          record.id === editingCell.recordId
+            ? { ...record, ...updatedData }
+            : record,
+        ),
+      );
+
+      setEditingCell(null);
+      setInlineEditData({});
+    } catch (error) {
+      console.error("Failed to update record:", error);
+      setAlert({ message: "Failed to update record", type: "error" });
+    }
+  };
+
+  // Save a specific field value directly, bypassing stale state issues with onBlur
+  const saveFieldDirectly = async (
+    field: keyof EMoURecord,
+    value: string | number,
+  ) => {
+    if (!editingCell || !user) return;
+
+    try {
+      const updates: Partial<EMoURecord> = {
+        ...inlineEditData,
+        [field]: value,
+      };
+
+      // Auto-update status when toDate changes
+      if (field === "toDate" && typeof value === "string") {
+        if (
+          value.toLowerCase().includes("perpetual") ||
+          value.toLowerCase().includes("indefinite")
+        ) {
+          updates.status = "Active";
+        } else {
+          try {
+            const [day, month, year] = value.split(".").map(Number);
+            const toDate = new Date(year, month - 1, day);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            toDate.setHours(0, 0, 0, 0);
+            if (toDate >= today) {
+              updates.status = "Active";
+            } else {
+              updates.status = "Expired";
+            }
+          } catch {
+            // Keep current status if date parsing fails
+          }
+        }
+      }
+
+      // Auto-update department when maintainedBy changes
+      if (field === "maintainedBy" && typeof value === "string") {
+        if (value === "Institution" || value === "Incubation") {
+          updates.department = value;
+        } else if (value === "Departments") {
+          // If department is currently Institution/Incubation, reset to first department
+          const currentDept = (inlineEditData.department as string) || "";
+          if (currentDept === "Institution" || currentDept === "Incubation") {
+            updates.department = "CSE";
+          }
+        }
+      }
+
+      const updatedData = {
+        ...updates,
+        updatedBy: user.uid,
+        updatedByName: user.displayName,
+        updatedAt: new Date(),
+      };
+
+      await updateEMoU(editingCell.recordId, updatedData);
+
       setRecords((prevRecords) =>
         prevRecords.map((record) =>
           record.id === editingCell.recordId
@@ -766,6 +855,14 @@ function HomePage() {
 
     setUploadingDoc({ recordId, field });
     try {
+      // Delete old file from Cloudinary if replacing
+      const existingRecord = records.find((r) => r.id === recordId);
+      const oldUrl = existingRecord?.[field];
+      if (oldUrl && firebaseUser) {
+        const idToken = await firebaseUser.getIdToken();
+        await deleteFromCloudinary(oldUrl, idToken);
+      }
+
       const result = await uploadToCloudinary(file);
 
       if (!result.success || !result.url) {
@@ -1245,7 +1342,7 @@ function HomePage() {
                           displayContent =
                             content.substring(0, truncateLength) + "...";
                         }
-                        
+
                         // Filter out invalid placeholder values
                         if (displayContent === "file chosen") {
                           displayContent = "";
@@ -1294,9 +1391,77 @@ function HomePage() {
                             record.companyName,
                             "",
                           )}
-                          <td className="text-xs">
-                            {record.department}
-                          </td>
+                          {(() => {
+                            const maintainedByValue =
+                              record.maintainedBy || "Departments";
+                            const isDeptEditable =
+                              maintainedByValue === "Departments";
+                            const isEditing =
+                              editingCell?.recordId === record.id &&
+                              editingCell?.field === "department";
+                            const cellStyle = isEditing
+                              ? {
+                                  border: "3px solid #000000",
+                                  outline: "none",
+                                  padding: "4px",
+                                  backgroundColor: "#f5f5f5",
+                                }
+                              : {};
+
+                            return (
+                              <td
+                                className={`text-xs ${isEditable && isDeptEditable ? "cursor-pointer hover:bg-blue-50" : ""}`}
+                                onClick={() =>
+                                  isEditable &&
+                                  isDeptEditable &&
+                                  handleCellClick(record, "department")
+                                }
+                                style={cellStyle}
+                                title={
+                                  isDeptEditable
+                                    ? isEditable && !isEditing
+                                      ? "Click to edit"
+                                      : ""
+                                    : `Set by Maintained By: ${maintainedByValue}`
+                                }
+                              >
+                                {isDeptEditable ? (
+                                  isEditing ? (
+                                    <select
+                                      value={
+                                        (inlineEditData.department as string) ||
+                                        record.department
+                                      }
+                                      onChange={(e) =>
+                                        saveFieldDirectly(
+                                          "department",
+                                          e.target.value,
+                                        )
+                                      }
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Escape")
+                                          cancelInlineEdit();
+                                      }}
+                                      autoFocus
+                                      className="w-full h-full px-1 py-1 text-xs border-0 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                                    >
+                                      {departments.map((dept) => (
+                                        <option key={dept} value={dept}>
+                                          {dept}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    record.department
+                                  )
+                                ) : (
+                                  <span className="text-[#6b7280] italic">
+                                    {maintainedByValue}
+                                  </span>
+                                )}
+                              </td>
+                            );
+                          })()}
                           {(() => {
                             const isEditing =
                               editingCell?.recordId === record.id &&
@@ -1331,15 +1496,10 @@ function HomePage() {
                                       "National"
                                     }
                                     onChange={(e) =>
-                                      handleInlineFieldChange(
-                                        "scope",
-                                        e.target.value,
-                                      )
+                                      saveFieldDirectly("scope", e.target.value)
                                     }
-                                    onBlur={saveInlineEdit}
                                     onKeyDown={(e) => {
-                                      if (e.key === "Enter") saveInlineEdit();
-                                      else if (e.key === "Escape")
+                                      if (e.key === "Escape")
                                         cancelInlineEdit();
                                     }}
                                     autoFocus
@@ -1391,15 +1551,13 @@ function HomePage() {
                                       "Departments"
                                     }
                                     onChange={(e) =>
-                                      handleInlineFieldChange(
+                                      saveFieldDirectly(
                                         "maintainedBy",
                                         e.target.value,
                                       )
                                     }
-                                    onBlur={saveInlineEdit}
                                     onKeyDown={(e) => {
-                                      if (e.key === "Enter") saveInlineEdit();
-                                      else if (e.key === "Escape")
+                                      if (e.key === "Escape")
                                         cancelInlineEdit();
                                     }}
                                     autoFocus
@@ -1459,7 +1617,9 @@ function HomePage() {
                                   <input
                                     type="date"
                                     defaultValue={convertToInputFormat(
-                                      record.fromDate === "file chosen" ? "" : record.fromDate,
+                                      record.fromDate === "file chosen"
+                                        ? ""
+                                        : record.fromDate,
                                     )}
                                     onChange={(e) => {
                                       const val = e.target.value;
@@ -1482,8 +1642,10 @@ function HomePage() {
                                     autoFocus
                                     className="w-full h-full px-1 py-1 text-xs border-0 focus:outline-none focus:ring-2 focus:ring-blue-400"
                                   />
+                                ) : record.fromDate === "file chosen" ? (
+                                  ""
                                 ) : (
-                                  record.fromDate === "file chosen" ? "" : record.fromDate
+                                  record.fromDate
                                 )}
                               </td>
                             );
@@ -1526,7 +1688,9 @@ function HomePage() {
                                   <input
                                     type="date"
                                     defaultValue={convertToInputFormat(
-                                      record.toDate === "file chosen" ? "" : record.toDate,
+                                      record.toDate === "file chosen"
+                                        ? ""
+                                        : record.toDate,
                                     )}
                                     onChange={(e) => {
                                       const val = e.target.value;
@@ -1549,8 +1713,10 @@ function HomePage() {
                                     autoFocus
                                     className="w-full h-full px-1 py-1 text-xs border-0 focus:outline-none focus:ring-2 focus:ring-blue-400"
                                   />
+                                ) : record.toDate === "file chosen" ? (
+                                  ""
                                 ) : (
-                                  record.toDate === "file chosen" ? "" : record.toDate
+                                  record.toDate
                                 )}
                               </td>
                             );
@@ -1588,15 +1754,13 @@ function HomePage() {
                                       inlineEditData.status || record.status
                                     }
                                     onChange={(e) =>
-                                      handleInlineFieldChange(
+                                      saveFieldDirectly(
                                         "status",
                                         e.target.value,
                                       )
                                     }
-                                    onBlur={saveInlineEdit}
                                     onKeyDown={(e) => {
-                                      if (e.key === "Enter") saveInlineEdit();
-                                      else if (e.key === "Escape")
+                                      if (e.key === "Escape")
                                         cancelInlineEdit();
                                     }}
                                     autoFocus
@@ -1732,15 +1896,13 @@ function HomePage() {
                                       3
                                     }
                                     onChange={(e) =>
-                                      handleInlineFieldChange(
+                                      saveFieldDirectly(
                                         "companyRelationship",
                                         parseInt(e.target.value),
                                       )
                                     }
-                                    onBlur={saveInlineEdit}
                                     onKeyDown={(e) => {
-                                      if (e.key === "Enter") saveInlineEdit();
-                                      else if (e.key === "Escape")
+                                      if (e.key === "Escape")
                                         cancelInlineEdit();
                                     }}
                                     autoFocus
@@ -1854,15 +2016,13 @@ function HomePage() {
                                       "No"
                                     }
                                     onChange={(e) =>
-                                      handleInlineFieldChange(
+                                      saveFieldDirectly(
                                         "goingForRenewal",
                                         e.target.value,
                                       )
                                     }
-                                    onBlur={saveInlineEdit}
                                     onKeyDown={(e) => {
-                                      if (e.key === "Enter") saveInlineEdit();
-                                      else if (e.key === "Escape")
+                                      if (e.key === "Escape")
                                         cancelInlineEdit();
                                     }}
                                     autoFocus
@@ -1921,15 +2081,13 @@ function HomePage() {
                                       "Not Available"
                                     }
                                     onChange={(e) =>
-                                      handleInlineFieldChange(
+                                      saveFieldDirectly(
                                         "documentAvailability",
                                         e.target.value,
                                       )
                                     }
-                                    onBlur={saveInlineEdit}
                                     onKeyDown={(e) => {
-                                      if (e.key === "Enter") saveInlineEdit();
-                                      else if (e.key === "Escape")
+                                      if (e.key === "Escape")
                                         cancelInlineEdit();
                                     }}
                                     autoFocus

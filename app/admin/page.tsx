@@ -15,7 +15,7 @@ import {
   EMoUStatus,
 } from "@/types";
 import { getAllUsers, getEMoUs, updateEMoU } from "@/lib/firestore";
-import { uploadToCloudinary } from "@/lib/cloudinary";
+import { uploadToCloudinary, deleteFromCloudinary } from "@/lib/cloudinary";
 import { useRouter } from "next/navigation";
 import { auth } from "@/lib/firebase";
 import {
@@ -85,6 +85,14 @@ function AdminPage() {
     "IT",
     "AIDS",
     "CSBS",
+    "E&I",
+    "MECHATRONICS",
+    "CCE",
+    "AIML",
+    "CYBERSECURITY",
+    "IOT",
+    "EICE",
+    "CSE MTECH",
   ];
 
   useEffect(() => {
@@ -317,6 +325,87 @@ function AdminPage() {
     setInlineEditData({});
   };
 
+  // Save a specific field value directly, bypassing stale state issues with onBlur
+  const saveFieldDirectly = async (
+    field: keyof EMoURecord,
+    value: string | number,
+  ) => {
+    if (!editingCell || !currentUser) return;
+
+    try {
+      const updates: Partial<EMoURecord> = {
+        ...inlineEditData,
+        [field]: value,
+      };
+
+      // Auto-update status when toDate changes
+      if (field === "toDate" && typeof value === "string") {
+        const dateStr = value.toLowerCase();
+        if (dateStr === "perpetual" || dateStr === "indefinite") {
+          updates.status = "Active" as EMoUStatus;
+        } else {
+          const parts = value.split(".");
+          if (parts.length === 3) {
+            const day = parseInt(parts[0], 10);
+            const month = parseInt(parts[1], 10) - 1;
+            const year = parseInt(parts[2], 10);
+            const toDate = new Date(year, month, day);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            if (toDate >= today) {
+              updates.status = "Active" as EMoUStatus;
+            } else {
+              updates.status = "Expired" as EMoUStatus;
+            }
+          }
+        }
+      }
+
+      // Auto-update department when maintainedBy changes
+      if (field === "maintainedBy" && typeof value === "string") {
+        if (value === "Institution" || value === "Incubation") {
+          updates.department = value as DepartmentCode;
+        } else if (value === "Departments") {
+          const currentDept = (inlineEditData.department as string) || "";
+          if (currentDept === "Institution" || currentDept === "Incubation") {
+            updates.department = "CSE" as DepartmentCode;
+          }
+        }
+      }
+
+      const updatedData = {
+        ...updates,
+        updatedBy: currentUser.uid,
+        updatedByName: currentUser.displayName,
+        updatedAt: new Date(),
+      };
+
+      await updateEMoU(editingCell.recordId, updatedData);
+
+      setPendingRecords((prev) =>
+        prev.map((r) =>
+          r.id === editingCell.recordId ? { ...r, ...updatedData } : r,
+        ),
+      );
+      setDraftRecords((prev) =>
+        prev.map((r) =>
+          r.id === editingCell.recordId ? { ...r, ...updatedData } : r,
+        ),
+      );
+      setApprovedRecords((prev) =>
+        prev.map((r) =>
+          r.id === editingCell.recordId ? { ...r, ...updatedData } : r,
+        ),
+      );
+
+      setEditingCell(null);
+      setInlineEditData({});
+    } catch (error) {
+      console.error("Failed to update record:", error);
+      setAlert({ message: "Failed to update record", type: "error" });
+    }
+  };
+
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     // Don't start dragging if clicking on interactive elements
     const target = e.target as HTMLElement;
@@ -407,6 +496,22 @@ function AdminPage() {
   ) => {
     setUploadingDoc({ recordId, field });
     try {
+      // Delete old file from Cloudinary if replacing
+      const allRecords = [
+        ...pendingRecords,
+        ...draftRecords,
+        ...approvedRecords,
+      ];
+      const existingRecord = allRecords.find((r) => r.id === recordId);
+      const oldUrl = existingRecord?.[field];
+      if (oldUrl) {
+        const currentUser = auth.currentUser;
+        if (currentUser) {
+          const idToken = await currentUser.getIdToken();
+          await deleteFromCloudinary(oldUrl, idToken);
+        }
+      }
+
       const result = await uploadToCloudinary(file);
 
       if (!result.success || !result.url) {
@@ -774,12 +879,10 @@ function AdminPage() {
                             defaultValue,
                         )}
                         onChange={(e) =>
-                          handleInlineFieldChange(field, e.target.value)
+                          saveFieldDirectly(field, e.target.value)
                         }
-                        onBlur={saveInlineEdit}
                         onKeyDown={(e) => {
-                          if (e.key === "Enter") saveInlineEdit();
-                          else if (e.key === "Escape") cancelInlineEdit();
+                          if (e.key === "Escape") cancelInlineEdit();
                         }}
                         autoFocus
                         className="w-full h-full px-1 py-1 text-xs border-0 focus:outline-none focus:ring-2 focus:ring-blue-400"
@@ -879,7 +982,30 @@ function AdminPage() {
                     record.companyName,
                     "",
                   )}
-                  <td className="text-xs">{record.department}</td>
+                  {(() => {
+                    const maintainedByValue =
+                      record.maintainedBy || "Departments";
+                    const isDeptEditable = maintainedByValue === "Departments";
+
+                    if (isDeptEditable) {
+                      return renderSelectCell(
+                        "department",
+                        departments.map((d) => ({ value: d, label: d })),
+                        record.department,
+                      );
+                    }
+
+                    return (
+                      <td
+                        className="text-center text-xs"
+                        title={`Set by Maintained By: ${maintainedByValue}`}
+                      >
+                        <span className="text-[#6b7280] italic">
+                          {maintainedByValue}
+                        </span>
+                      </td>
+                    );
+                  })()}
                   {renderSelectCell(
                     "scope",
                     [
@@ -926,12 +1052,10 @@ function AdminPage() {
                               getDisplayStatus(record.status)
                             }
                             onChange={(e) =>
-                              handleInlineFieldChange("status", e.target.value)
+                              saveFieldDirectly("status", e.target.value)
                             }
-                            onBlur={saveInlineEdit}
                             onKeyDown={(e) => {
-                              if (e.key === "Enter") saveInlineEdit();
-                              else if (e.key === "Escape") cancelInlineEdit();
+                              if (e.key === "Escape") cancelInlineEdit();
                             }}
                             autoFocus
                             className="w-full h-full px-1 py-1 text-xs border-0 focus:outline-none focus:ring-2 focus:ring-blue-400"
