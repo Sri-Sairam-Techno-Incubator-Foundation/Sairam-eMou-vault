@@ -722,6 +722,30 @@ function AdminPage() {
     }
   };
 
+  // Check if a date has a very large year (like 9999) - treat as perpetual
+  const isPerpetualDate = (dateStr: string): boolean => {
+    if (!dateStr) return false;
+    const parts = dateStr.split(".");
+    if (parts.length === 3) {
+      const year = parseInt(parts[2], 10);
+      return year >= 9000; // Years 9000+ are treated as perpetual
+    }
+    return false;
+  };
+
+  // Format date for display - show "Perpetual" for large year dates
+  const formatDisplayDate = (dateStr: string): string => {
+    if (!dateStr || dateStr === "file chosen") return "";
+    if (
+      dateStr.toLowerCase().includes("perpetual") ||
+      dateStr.toLowerCase().includes("indefinite") ||
+      isPerpetualDate(dateStr)
+    ) {
+      return "Perpetual";
+    }
+    return dateStr;
+  };
+
   const getDisplayStatus = (record: EMoURecord): string => {
     // Handle "file chosen" placeholder (cast to string to avoid type error)
     const statusStr = record.status as string;
@@ -737,7 +761,8 @@ function AdminPage() {
     if (
       !toDate ||
       toDate.toLowerCase().includes("perpetual") ||
-      toDate.toLowerCase().includes("indefinite")
+      toDate.toLowerCase().includes("indefinite") ||
+      isPerpetualDate(toDate)
     ) {
       return "Active";
     }
@@ -1099,7 +1124,7 @@ function AdminPage() {
                             {record[field] === "file chosen" ||
                             record[field] === "file chosen"
                               ? ""
-                              : record[field]}
+                              : formatDisplayDate(record[field])}
                           </span>
                           <FiCalendar className="text-blue-500" size={12} />
                         </span>
