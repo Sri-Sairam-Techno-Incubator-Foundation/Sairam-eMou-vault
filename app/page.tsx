@@ -1330,7 +1330,7 @@ function HomePage() {
                       border-radius: 2px;
                     }
                     .sheet-table tbody tr {
-                      height: 32px;
+                      height: 35.5px;
                     }
                   `}</style>
                   <table className="sheet-table">
