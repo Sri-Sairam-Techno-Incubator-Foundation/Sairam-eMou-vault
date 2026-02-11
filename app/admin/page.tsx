@@ -987,6 +987,9 @@ function AdminPage() {
                 <th style={{ width: "100px" }}>From Date</th>
                 <th style={{ width: "100px" }}>To Date</th>
                 <th style={{ width: "110px" }}>Status</th>
+                <th style={{ width: "150px" }}>Doc Availability</th>
+                <th style={{ width: "180px" }}>HO Approval</th>
+                <th style={{ width: "180px" }}>Signed Agreement</th>
                 <th style={{ minWidth: "250px" }}>Description</th>
                 <th style={{ minWidth: "200px" }}>About Company</th>
                 <th style={{ minWidth: "200px" }}>Company Address</th>
@@ -1006,9 +1009,7 @@ function AdminPage() {
                 <th style={{ width: "90px" }}>Internship</th>
                 <th style={{ width: "80px" }}>Renewal</th>
                 <th style={{ minWidth: "200px" }}>Benefits Achieved</th>
-                <th style={{ width: "150px" }}>Doc Availability</th>
-                <th style={{ width: "180px" }}>HO Approval</th>
-                <th style={{ width: "180px" }}>Signed Agreement</th>
+                
                 <th style={{ width: "120px" }}>Created By</th>
                 <th style={{ width: showApprovalActions ? "200px" : "100px" }}>
                   Actions
