@@ -944,15 +944,17 @@ function AdminPage() {
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseLeave}
         >
-          <style jsx>{`
+          <style jsx global>{`
             .sheet-table {
               min-width: 4000px;
-              border-collapse: collapse;
+              border-collapse: separate;
+              border-spacing: 0;
             }
             .sheet-table th,
             .sheet-table td {
               padding: 4px 8px;
               font-size: 11px;
+              border-bottom: 1px solid #e5e7eb;
             }
             .sheet-table th {
               font-size: 10px;
@@ -972,7 +974,7 @@ function AdminPage() {
               border-radius: 2px;
             }
             .sheet-table tbody tr {
-              height: 32px;
+              height: 35.5px;
             }
           `}</style>
           <table className="sheet-table">
@@ -987,9 +989,6 @@ function AdminPage() {
                 <th style={{ width: "100px" }}>From Date</th>
                 <th style={{ width: "100px" }}>To Date</th>
                 <th style={{ width: "110px" }}>Status</th>
-                <th style={{ width: "150px" }}>Doc Availability</th>
-                <th style={{ width: "180px" }}>HO Approval</th>
-                <th style={{ width: "180px" }}>Signed Agreement</th>
                 <th style={{ minWidth: "250px" }}>Description</th>
                 <th style={{ minWidth: "200px" }}>About Company</th>
                 <th style={{ minWidth: "200px" }}>Company Address</th>
@@ -1009,9 +1008,11 @@ function AdminPage() {
                 <th style={{ width: "90px" }}>Internship</th>
                 <th style={{ width: "80px" }}>Renewal</th>
                 <th style={{ minWidth: "200px" }}>Benefits Achieved</th>
-                
                 <th style={{ width: "120px" }}>Created By</th>
-                <th style={{ width: showApprovalActions ? "200px" : "100px" }}>
+                <th style={{ width: "150px", position: "sticky", right: showApprovalActions ? 335 : 160, zIndex: 12, background: "#fff", boxShadow: "-2px 0 4px rgba(0,0,0,0.06)" }}>Doc Availability</th>
+                <th style={{ width: "180px", position: "sticky", right: showApprovalActions ? 250 : 120, zIndex: 12, background: "#fff" }}>HO Approval</th>
+                <th style={{ width: "180px", position: "sticky", right: showApprovalActions ? 165 : 45, zIndex: 12, background: "#fff", boxShadow: "-2px 0 4px rgba(0,0,0,0.04)" }}>Signed Agreement</th>
+                <th style={{ width: showApprovalActions ? "200px" : "100px", position: "sticky", right: 0, zIndex: 12, background: "#fff" }}>
                   Actions
                 </th>
               </tr>
@@ -1022,6 +1023,7 @@ function AdminPage() {
                   field: keyof EMoURecord,
                   options: { value: string; label: string }[],
                   defaultValue: string,
+                  extraStyle: React.CSSProperties = {},
                 ) => {
                   const isEditing =
                     editingCell?.recordId === record.id &&
@@ -1036,14 +1038,12 @@ function AdminPage() {
                   return (
                     <td
                       className="text-center cursor-pointer hover:bg-blue-50 relative"
+                      style={isEditing ? { padding: 0, overflow: "visible" as const, ...extraStyle } : extraStyle}
                       onClick={() => {
                         if (!isEditing) {
                           handleCellClick(record, field);
                         }
                       }}
-                      style={
-                        isEditing ? { padding: 0, overflow: "visible" } : {}
-                      }
                       title={!isEditing ? "Click to select" : ""}
                     >
                       {isEditing ? (
@@ -1380,6 +1380,7 @@ function AdminPage() {
                       "text-xs",
                       50,
                     )}
+                    <td className="text-xs">{record.createdByName}</td>
                     {renderSelectCell(
                       "documentAvailability",
                       [
@@ -1387,8 +1388,9 @@ function AdminPage() {
                         { value: "Not Available", label: "Not Available" },
                       ],
                       "Not Available",
+                      { position: "sticky" as const, right: showApprovalActions ? 335 : 160, zIndex: 2, background: "#fff", boxShadow: "-2px 0 4px rgba(0,0,0,0.06)" },
                     )}
-                    <td className="text-xs text-center">
+                    <td className="text-xs text-center" style={{ position: "sticky", right: showApprovalActions ? 250 : 120, zIndex: 2, background: "#fff" }}>
                       <div className="flex gap-1 items-center justify-center">
                         {record.hodApprovalDoc && (
                           <button
@@ -1400,53 +1402,60 @@ function AdminPage() {
                             }
                             className="text-blue-600 hover:underline cursor-pointer text-xs flex items-center gap-1"
                           >
-                            <FiEye /> View
+                            View
                           </button>
                         )}
-                        {record.hodApprovalDoc && (
-                          <span className="text-gray-300">|</span>
-                        )}
-                        <label
-                          className={`relative cursor-pointer px-2 py-1 text-white rounded transition-colors flex items-center gap-1 text-xs ${record.hodApprovalDoc ? "bg-blue-600 hover:bg-blue-700" : "bg-green-600 hover:bg-green-700"}`}
-                        >
-                          {uploadingDoc?.recordId === record.id &&
-                          uploadingDoc?.field === "hodApprovalDoc" ? (
-                            <span className="flex items-center gap-1">
-                              <div className="animate-spin h-3 w-3 border-2 border-white border-t-transparent rounded-full"></div>
-                              Uploading...
-                            </span>
-                          ) : (
-                            <span className="flex items-center gap-1">
-                              <FiUpload />
-                              {record.hodApprovalDoc ? "Replace" : "Upload"}
-                            </span>
+                        <>
+                          {record.hodApprovalDoc && (
+                            <span className="text-gray-300">|</span>
                           )}
-                          <input
-                            type="file"
-                            accept=".pdf,.doc,.docx,image/*"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) {
-                                handleFileUpload(
-                                  record.id,
-                                  "hodApprovalDoc",
-                                  file,
-                                );
+                          <label
+                            className={`relative cursor-pointer px-2 py-1 text-white rounded transition-colors flex items-center gap-1 text-xs ${record.hodApprovalDoc ? "bg-blue-600 hover:bg-blue-700" : "bg-green-600 hover:bg-green-700"}`}
+                          >
+                            {uploadingDoc?.recordId === record.id &&
+                            uploadingDoc?.field ===
+                              "hodApprovalDoc" ? (
+                              <span className="flex items-center gap-1">
+                                <div className="animate-spin h-3 w-3 border-2 border-white border-t-transparent rounded-full"></div>
+                                Uploading...
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1">
+                                <FiUpload />
+                                {record.hodApprovalDoc
+                                  ? "Replace"
+                                  : "Upload"}
+                              </span>
+                            )}
+                            <input
+                              type="file"
+                              accept=".pdf,.doc,.docx,image/*"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  handleFileUpload(
+                                    record.id,
+                                    "hodApprovalDoc",
+                                    file,
+                                  );
+                                }
+                                e.target.value = "";
+                              }}
+                              disabled={
+                                uploadingDoc?.recordId ===
+                                  record.id &&
+                                uploadingDoc?.field ===
+                                  "hodApprovalDoc"
                               }
-                              e.target.value = "";
-                            }}
-                            disabled={
-                              uploadingDoc?.recordId === record.id &&
-                              uploadingDoc?.field === "hodApprovalDoc"
-                            }
-                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                            onClick={(e) => e.stopPropagation()}
-                          />
-                        </label>
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </label>
+                        </>
                         {!record.hodApprovalDoc}
                       </div>
                     </td>
-                    <td className="text-xs text-center">
+                    <td className="text-xs text-center" style={{ position: "sticky", right: showApprovalActions ? 165 : 45, zIndex: 2, background: "#fff", boxShadow: "-2px 0 4px rgba(0,0,0,0.04)" }}>
                       <div className="flex gap-1 items-center justify-center">
                         {record.signedAgreementDoc && (
                           <button
@@ -1458,55 +1467,61 @@ function AdminPage() {
                             }
                             className="text-blue-600 hover:underline cursor-pointer text-xs flex items-center gap-1"
                           >
-                            <FiEye /> View
+                            View
                           </button>
                         )}
-                        {record.signedAgreementDoc && (
-                          <span className="text-gray-300">|</span>
-                        )}
-                        <label
-                          className={`relative cursor-pointer px-2 py-1 text-white rounded transition-colors flex items-center gap-1 text-xs ${record.signedAgreementDoc ? "bg-blue-600 hover:bg-blue-700" : "bg-green-600 hover:bg-green-700"}`}
-                        >
-                          {uploadingDoc?.recordId === record.id &&
-                          uploadingDoc?.field === "signedAgreementDoc" ? (
-                            <span className="flex items-center gap-1">
-                              <div className="animate-spin h-3 w-3 border-2 border-white border-t-transparent rounded-full"></div>
-                              Uploading...
-                            </span>
-                          ) : (
-                            <span className="flex items-center gap-1">
-                              <FiUpload />
-                              {record.signedAgreementDoc ? "Replace" : "Upload"}
-                            </span>
+                        <>
+                          {record.signedAgreementDoc && (
+                            <span className="text-gray-300">|</span>
                           )}
-                          <input
-                            type="file"
-                            accept=".pdf,.doc,.docx,image/*"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) {
-                                handleFileUpload(
-                                  record.id,
-                                  "signedAgreementDoc",
-                                  file,
-                                );
+                          <label
+                            className={`relative cursor-pointer px-2 py-1 text-white rounded transition-colors flex items-center gap-1 text-xs ${record.signedAgreementDoc ? "bg-blue-600 hover:bg-blue-700" : "bg-green-600 hover:bg-green-700"}`}
+                          >
+                            {uploadingDoc?.recordId === record.id &&
+                            uploadingDoc?.field ===
+                              "signedAgreementDoc" ? (
+                              <span className="flex items-center gap-1">
+                                <div className="animate-spin h-3 w-3 border-2 border-white border-t-transparent rounded-full"></div>
+                                Uploading...
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1">
+                                <FiUpload />
+                                {record.signedAgreementDoc
+                                  ? "Replace"
+                                  : "Upload"}
+                              </span>
+                            )}
+                            <input
+                              type="file"
+                              accept=".pdf,.doc,.docx,image/*"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  handleFileUpload(
+                                    record.id,
+                                    "signedAgreementDoc",
+                                    file,
+                                  );
+                                }
+                                e.target.value = "";
+                              }}
+                              disabled={
+                                uploadingDoc?.recordId ===
+                                  record.id &&
+                                uploadingDoc?.field ===
+                                  "signedAgreementDoc"
                               }
-                              e.target.value = "";
-                            }}
-                            disabled={
-                              uploadingDoc?.recordId === record.id &&
-                              uploadingDoc?.field === "signedAgreementDoc"
-                            }
-                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                            onClick={(e) => e.stopPropagation()}
-                          />
-                        </label>
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </label>
+                        </>
                         {!record.signedAgreementDoc}
                       </div>
                     </td>
-                    <td className="text-xs">{record.createdByName}</td>
-                    <td>
-                      <div className="flex gap-1 flex-wrap">
+                    <td style={{ position: "sticky", right: 0, zIndex: 2, background: "#fff" }}>
+                      <div className="flex flex-row gap-1">
                         {showApprovalActions && (
                           <>
                             <button
@@ -1533,12 +1548,6 @@ function AdminPage() {
                             )}
                           </>
                         )}
-                        <button
-                          onClick={() => setViewingRecord(record)}
-                          className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
-                        >
-                          <FiEye /> View
-                        </button>
                       </div>
                     </td>
                   </tr>
