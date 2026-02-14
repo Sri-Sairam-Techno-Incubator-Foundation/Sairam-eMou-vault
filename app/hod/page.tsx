@@ -11,7 +11,7 @@ import { uploadToCloudinary } from "@/lib/cloudinary";
 import { useRouter } from "next/navigation";
 
 function HODPage() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const [draftRecords, setDraftRecords] = useState<EMoURecord[]>([]);
   const [pendingRecords, setPendingRecords] = useState<EMoURecord[]>([]);
@@ -35,13 +35,16 @@ function HODPage() {
   } | null>(null);
 
   useEffect(() => {
+    // Wait for auth to load before checking permissions
+    if (authLoading) return;
+
     if (user?.role !== "hod") {
       router.push("/");
     } else {
       loadRecords();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [authLoading, user]);
 
   const loadRecords = async () => {
     setLoading(true);

@@ -200,16 +200,15 @@ function HomePage() {
         filters.status = selectedStatus as FilterOptions["status"];
       }
 
-      if (debouncedSearchTerm) {
-        filters.searchTerm = debouncedSearchTerm;
-      }
-
       // Show only approved records for all users (including admin on main sheet)
       const approvalStatus = "approved";
 
+      // When searching, fetch ALL records to search across entire dataset
+      // Otherwise, fetch current page
+      const shouldFetchAll = debouncedSearchTerm || showAll;
       const result = await getEMoUsPage(
-        showAll ? 1 : currentPage,
-        showAll ? 10000 : itemsPerPage,
+        shouldFetchAll ? 1 : currentPage,
+        shouldFetchAll ? 10000 : itemsPerPage,
         filters,
         approvalStatus,
       );
@@ -289,6 +288,12 @@ function HomePage() {
         });
       }
 
+      // Filter for records with documents
+      if (selectedStatus === "With Docs") {
+        data = data.filter(
+          (record) => record.hodApprovalDoc || record.signedAgreementDoc,
+        );
+      }
 
       // Sort by department alphabetically (A-Z), then by ID sequential number
       data.sort((a, b) => {
@@ -299,9 +304,31 @@ function HomePage() {
         return aSeq - bSeq;
       });
 
-      setRecords(data);
-      setTotalCount(result.totalCount);
-      setTotalPages(result.totalPages);
+      // When searching or filtering, paginate the filtered results client-side
+      if (
+        debouncedSearchTerm ||
+        selectedStatus === "Expiring" ||
+        selectedStatus === "With Docs"
+      ) {
+        const filteredTotal = data.length;
+        const filteredPages = Math.ceil(filteredTotal / itemsPerPage);
+
+        // Paginate filtered results client-side
+        if (!showAll) {
+          const startIndex = (currentPage - 1) * itemsPerPage;
+          const endIndex = startIndex + itemsPerPage;
+          data = data.slice(startIndex, endIndex);
+        }
+
+        setRecords(data);
+        setTotalCount(filteredTotal);
+        setTotalPages(filteredPages);
+      } else {
+        // Use server-side pagination counts
+        setRecords(data);
+        setTotalCount(result.totalCount);
+        setTotalPages(result.totalPages);
+      }
 
       // Load stats separately
       loadStats();
@@ -451,50 +478,6 @@ function HomePage() {
       });
     } catch (error) {
       console.error("Failed to load stats:", error);
-    }
-  };
-
-  const handleCreateRecord = async (data: Partial<EMoURecord>) => {
-    if (!user) {
-      console.error("No user available");
-      setAlert({ message: "Please log in to create records", type: "error" });
-      return;
-    }
-
-    if (!user.uid) {
-      console.error("User object missing uid:", user);
-      setAlert({
-        message: "User session is invalid. Please log out and log back in.",
-        type: "error",
-      });
-      return;
-    }
-
-    try {
-      const now = new Date();
-      const recordData = {
-        ...data,
-        createdBy: user.uid,
-        createdByName: user.displayName,
-        createdAt: now,
-      };
-
-      console.log("Creating record with data:", {
-        createdBy: user.uid,
-        createdByName: user.displayName,
-      });
-
-      await createEMoU(recordData as Omit<EMoURecord, "id">);
-
-      setShowForm(false);
-      loadRecords();
-      setAlert({ message: "Record created successfully!", type: "success" });
-    } catch (error) {
-      console.error("Failed to create record:", error);
-      setAlert({
-        message: "Failed to create record. Check console for details.",
-        type: "error",
-      });
     }
   };
 
@@ -1010,7 +993,7 @@ function HomePage() {
     }
   };
 
-  if (showForm) {
+  if (showForm && editingRecord) {
     return (
       <ProtectedRoute>
         {alert && (
@@ -1024,12 +1007,12 @@ function HomePage() {
           <div className="max-w-6xl mx-auto">
             <div className="mb-6">
               <h2 className="text-xl font-semibold text-[#1f2937]">
-                {editingRecord ? "Edit eMoU Record" : "New eMoU Record"}
+                Edit eMoU Record
               </h2>
             </div>
             <EMoUForm
-              initialData={editingRecord || undefined}
-              onSubmit={editingRecord ? handleUpdateRecord : handleCreateRecord}
+              initialData={editingRecord}
+              onSubmit={handleUpdateRecord}
               onCancel={() => {
                 setShowForm(false);
                 setEditingRecord(null);
@@ -1132,7 +1115,7 @@ function HomePage() {
                   <FiUpload /> Import
                 </button>
                 <button
-                  onClick={() => setShowForm(true)}
+                  onClick={() => router.push("/create-emou")}
                   className="btn btn-primary flex items-center gap-2"
                 >
                   <FiPlus /> New MOU
@@ -1175,7 +1158,7 @@ function HomePage() {
                   { value: "all", label: "All Status" },
                   { value: "Active", label: "Active" },
                   { value: "Expired", label: "Expired" },
-                  { value: "Renewal Pending", label: "Renewal Pending" },
+                  { value: "Renewal Pending", label: "Renewal" },
                   { value: "Draft", label: "Draft" },
                 ]}
                 value={selectedStatus}
@@ -1416,10 +1399,52 @@ function HomePage() {
                         <th style={{ width: "80px" }}>Renewal</th>
                         <th style={{ minWidth: "200px" }}>Benefits Achieved</th>
                         <th style={{ width: "120px" }}>Created By</th>
-                        <th style={{ width: "150px", position: "sticky", right: 320, zIndex: 12, background: "#fff", boxShadow: "-2px 0 4px rgba(0,0,0,0.06)" }}>Doc Availability</th>
-                        <th style={{ width: "180px", position: "sticky", right: 235, zIndex: 12, background: "#fff" }}>HO Approval</th>
-                        <th style={{ width: "180px", position: "sticky", right: 110, zIndex: 12, background: "#fff", boxShadow: "-2px 0 4px rgba(0,0,0,0.04)" }}>Signed Agreement</th>
-                        <th style={{ width: "100px", position: "sticky", right: 0, zIndex: 12, background: "#fff" }}>Actions</th>
+                        <th
+                          style={{
+                            width: "150px",
+                            position: "sticky",
+                            right: 320,
+                            zIndex: 12,
+                            background: "#fff",
+                            boxShadow: "-2px 0 4px rgba(0,0,0,0.06)",
+                          }}
+                        >
+                          Doc Availability
+                        </th>
+                        <th
+                          style={{
+                            width: "180px",
+                            position: "sticky",
+                            right: 235,
+                            zIndex: 12,
+                            background: "#fff",
+                          }}
+                        >
+                          HO Approval
+                        </th>
+                        <th
+                          style={{
+                            width: "180px",
+                            position: "sticky",
+                            right: 110,
+                            zIndex: 12,
+                            background: "#fff",
+                            boxShadow: "-2px 0 4px rgba(0,0,0,0.04)",
+                          }}
+                        >
+                          Signed Agreement
+                        </th>
+                        <th
+                          style={{
+                            width: "100px",
+                            position: "sticky",
+                            right: 0,
+                            zIndex: 12,
+                            background: "#fff",
+                          }}
+                        >
+                          Actions
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
@@ -2212,7 +2237,14 @@ function HomePage() {
                               return (
                                 <td
                                   className={`text-xs relative ${isEditable ? "cursor-pointer hover:bg-blue-50" : ""}`}
-                                  style={{ position: "sticky", right: 320, zIndex: isEditing ? 50 : 2, background: "#fff", boxShadow: "-2px 0 4px rgba(0,0,0,0.06)", ...cellStyle }}
+                                  style={{
+                                    position: "sticky",
+                                    right: 320,
+                                    zIndex: isEditing ? 50 : 2,
+                                    background: "#fff",
+                                    boxShadow: "-2px 0 4px rgba(0,0,0,0.06)",
+                                    ...cellStyle,
+                                  }}
                                   onClick={() =>
                                     isEditable &&
                                     handleCellClick(
@@ -2267,7 +2299,15 @@ function HomePage() {
                                 </td>
                               );
                             })()}
-                            <td className="text-xs text-center" style={{ position: "sticky", right: 235, zIndex: 2, background: "#fff" }}>
+                            <td
+                              className="text-xs text-center"
+                              style={{
+                                position: "sticky",
+                                right: 235,
+                                zIndex: 2,
+                                background: "#fff",
+                              }}
+                            >
                               <div className="flex gap-1 items-center justify-center">
                                 {record.hodApprovalDoc && (
                                   <button
@@ -2336,7 +2376,16 @@ function HomePage() {
                                   "-"}
                               </div>
                             </td>
-                            <td className="text-xs text-center" style={{ position: "sticky", right: 110, zIndex: 2, background: "#fff", boxShadow: "-2px 0 4px rgba(0,0,0,0.04)" }}>
+                            <td
+                              className="text-xs text-center"
+                              style={{
+                                position: "sticky",
+                                right: 110,
+                                zIndex: 2,
+                                background: "#fff",
+                                boxShadow: "-2px 0 4px rgba(0,0,0,0.04)",
+                              }}
+                            >
                               <div className="flex gap-1 items-center justify-center">
                                 {record.signedAgreementDoc && (
                                   <button
@@ -2405,7 +2454,14 @@ function HomePage() {
                                   "-"}
                               </div>
                             </td>
-                            <td style={{ position: "sticky", right: 0, zIndex: 2, background: "#fff" }}>
+                            <td
+                              style={{
+                                position: "sticky",
+                                right: 0,
+                                zIndex: 2,
+                                background: "#fff",
+                              }}
+                            >
                               <div className="flex gap-1">
                                 {isEditable && (
                                   <>

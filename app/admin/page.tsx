@@ -15,7 +15,7 @@ import {
   EMoURecord,
   EMoUStatus,
 } from "@/types";
-import { getAllUsers, getEMoUs, updateEMoU } from "@/lib/firestore";
+import { getAllUsers, getEMoUs, updateEMoU, deleteEMoU } from "@/lib/firestore";
 import { uploadToCloudinary, deleteFromCloudinary } from "@/lib/cloudinary";
 import { useRouter } from "next/navigation";
 import { auth } from "@/lib/firebase";
@@ -28,10 +28,11 @@ import {
   FiUserPlus,
   FiCalendar,
   FiChevronDown,
+  FiTrash2,
 } from "react-icons/fi";
 
 function AdminPage() {
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, loading: authLoading } = useAuth();
   const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
   const [pendingRecords, setPendingRecords] = useState<EMoURecord[]>([]);
@@ -98,6 +99,9 @@ function AdminPage() {
   ];
 
   useEffect(() => {
+    // Wait for auth to load before checking permissions
+    if (authLoading) return;
+
     // Allow both admin and master roles
     if (currentUser?.role !== "admin" && currentUser?.role !== "master") {
       router.push("/");
@@ -106,7 +110,7 @@ function AdminPage() {
       loadApprovalRecords();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [authLoading, currentUser]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -513,6 +517,28 @@ function AdminPage() {
     }
   };
 
+  const handleDeleteRecord = async (recordId: string) => {
+    const record = approvedRecords.find((r) => r.id === recordId);
+    setConfirmDialog({
+      title: "Delete Record",
+      message: `Are you sure you want to delete this record?\n\nCompany: ${record?.companyName || "Unknown"}\nID: ${recordId}\n\nThis action cannot be undone.`,
+      onConfirm: async () => {
+        try {
+          await deleteEMoU(recordId);
+          setAlert({
+            message: "Record deleted successfully!",
+            type: "success",
+          });
+          await loadApprovalRecords();
+        } catch (error) {
+          console.error("Failed to delete record:", error);
+          setAlert({ message: "Failed to delete record", type: "error" });
+        }
+        setConfirmDialog(null);
+      },
+    });
+  };
+
   const handleFileUpload = async (
     recordId: string,
     field: "hodApprovalDoc" | "signedAgreementDoc",
@@ -817,7 +843,7 @@ function AdminPage() {
         return { doc: 339, ho: 253, signed: 167 }[position];
       } else {
         // Approved section positions (keep original)
-        return { doc: 300, ho: 214, signed: 87 }[position];
+        return { doc: 363, ho: 277, signed: 150 }[position];
       }
     };
     // Helper function to get field type icon
@@ -1651,13 +1677,22 @@ function AdminPage() {
                             )}
                           </>
                         ) : (
-                          <button
-                            onClick={() => setViewingRecord(record)}
-                            className="px-2 py-1 text-[10px] font-medium bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
-                            title="View full record details"
-                          >
-                            View Details
-                          </button>
+                          <>
+                            <button
+                              onClick={() => setViewingRecord(record)}
+                              className="px-2 py-1 text-[10px] font-medium bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+                              title="View full record details"
+                            >
+                              View Details
+                            </button>
+                            <button
+                              onClick={() => handleDeleteRecord(record.id)}
+                              className="px-2 py-1 text-[10px] font-medium bg-red-600 hover:bg-red-700 text-white rounded transition-colors flex items-center gap-1"
+                              title="Delete record"
+                            >
+                              <FiTrash2 /> Delete
+                            </button>
+                          </>
                         )}
                       </div>
                     </td>
@@ -1740,20 +1775,6 @@ function AdminPage() {
                   className="btn btn-secondary flex items-center gap-2"
                 >
                   <FiArrowLeft /> Back to eMoUs
-                </button>
-                <button
-                  onClick={() => setShowForm(!showForm)}
-                  className="btn btn-primary flex items-center gap-2"
-                >
-                  {showForm ? (
-                    <>
-                      <FiX /> Cancel
-                    </>
-                  ) : (
-                    <>
-                      <FiUserPlus /> New User
-                    </>
-                  )}
                 </button>
               </div>
             </div>
@@ -1860,6 +1881,32 @@ function AdminPage() {
           {/* User Management Tab - Admin Only */}
           {activeTab === "users" && currentUser?.role === "admin" && (
             <>
+              {/* User Management Header */}
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-xl font-semibold text-[#1f2937]">
+                    User Management
+                  </h2>
+                  <p className="text-sm text-[#6b7280] mt-1">
+                    Manage system users and their permissions
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowForm(!showForm)}
+                  className="btn btn-primary flex items-center gap-2"
+                >
+                  {showForm ? (
+                    <>
+                      <FiX /> Cancel
+                    </>
+                  ) : (
+                    <>
+                      <FiUserPlus /> New User
+                    </>
+                  )}
+                </button>
+              </div>
+
               {/* New User Form - Professional Dialog */}
               {showForm && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -2089,7 +2136,7 @@ function AdminPage() {
               )}
 
               {/* Stats Cards */}
-              <div className="grid grid-cols-3 gap-4 mt-6 mb-4">
+              <div className="grid grid-cols-3 gap-4 mb-4">
                 <div className="bg-white p-4 rounded-lg border border-[#d1d5db]">
                   <div className="text-2xl font-semibold text-[#1f2937]">
                     {users.length}
