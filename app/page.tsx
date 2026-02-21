@@ -253,9 +253,13 @@ function HomePage() {
       // Show only approved records for all users (including admin on main sheet)
       const approvalStatus = "approved";
 
-      // When searching, fetch ALL records to search across entire dataset
+      // When searching or applying client-side filters, fetch ALL records
       // Otherwise, fetch current page
-      const shouldFetchAll = debouncedSearchTerm || showAll;
+      const shouldFetchAll =
+        debouncedSearchTerm ||
+        showAll ||
+        selectedStatus === "With Docs" ||
+        selectedStatus === "Expiring";
       const result = await getEMoUsPage(
         shouldFetchAll ? 1 : currentPage,
         shouldFetchAll ? 10000 : itemsPerPage,
