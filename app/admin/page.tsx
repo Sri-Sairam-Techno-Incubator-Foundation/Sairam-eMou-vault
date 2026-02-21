@@ -517,6 +517,20 @@ function AdminPage() {
     }
   };
 
+  const handleMoveToDraft = async (recordId: string) => {
+    try {
+      await updateEMoU(recordId, { approvalStatus: "draft" });
+      setAlert({
+        message: "Record reverted to draft!",
+        type: "success",
+      });
+      await loadApprovalRecords();
+    } catch (error) {
+      console.error("Failed to revert record:", error);
+      setAlert({ message: "Failed to revert record to draft", type: "error" });
+    }
+  };
+
   const handleDeleteRecord = async (recordId: string) => {
     const record = approvedRecords.find((r) => r.id === recordId);
     setConfirmDialog({
@@ -837,10 +851,10 @@ function AdminPage() {
     const getStickyRight = (position: "doc" | "ho" | "signed") => {
       if (section === "pending") {
         // Pending section positions (modifiable)
-        return { doc: 384, ho: 253, signed: 140 }[position];
+        return { doc: 410, ho: 313, signed: 216 }[position];
       } else if (section === "draft") {
         // Draft section positions (keep original)
-        return { doc: 339, ho: 253, signed: 167 }[position];
+        return { doc: 369, ho: 268, signed: 167 }[position];
       } else {
         // Approved section positions (keep original)
         return { doc: 363, ho: 277, signed: 150 }[position];
@@ -1510,6 +1524,7 @@ function AdminPage() {
                         right: getStickyRight("ho"),
                         zIndex: 2,
                         background: "#fff",
+                        minWidth: "180px",
                       }}
                     >
                       <div className="flex gap-1 items-center justify-center">
@@ -1579,6 +1594,7 @@ function AdminPage() {
                         zIndex: 2,
                         background: "#fff",
                         boxShadow: "-2px 0 4px rgba(0,0,0,0.04)",
+                        minWidth: "180px",
                       }}
                     >
                       <div className="flex gap-1 items-center justify-center">
@@ -1668,12 +1684,20 @@ function AdminPage() {
                               </button>
                             )}
                             {record.approvalStatus === "pending" && (
-                              <button
-                                onClick={() => handleRejectRecord(record.id)}
-                                className="px-2 py-1 text-[10px] font-medium bg-red-600 hover:bg-red-700 text-white rounded transition-colors flex items-center gap-1"
-                              >
-                                <FiX /> Reject
-                              </button>
+                              <>
+                                <button
+                                  onClick={() => handleMoveToDraft(record.id)}
+                                  className="px-2 py-1 text-[10px] font-medium bg-yellow-600 hover:bg-yellow-700 text-white rounded transition-colors flex items-center gap-1"
+                                >
+                                  <FiArrowLeft /> To Draft
+                                </button>
+                                <button
+                                  onClick={() => handleRejectRecord(record.id)}
+                                  className="px-2 py-1 text-[10px] font-medium bg-red-600 hover:bg-red-700 text-white rounded transition-colors flex items-center gap-1"
+                                >
+                                  <FiX /> Reject
+                                </button>
+                              </>
                             )}
                           </>
                         ) : (
