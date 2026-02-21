@@ -857,7 +857,7 @@ function AdminPage() {
         return { doc: 369, ho: 268, signed: 167 }[position];
       } else {
         // Approved section positions (keep original)
-        return { doc: 363, ho: 277, signed: 150 }[position];
+        return { doc: 508, ho: 329, signed: 150 }[position];
       }
     };
     // Helper function to get field type icon
