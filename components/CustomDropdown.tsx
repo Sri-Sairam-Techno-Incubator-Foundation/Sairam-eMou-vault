@@ -464,7 +464,10 @@ export function SearchableCellDropdown({
 
   // Reset highlighted index when search changes
   useEffect(() => {
-    setHighlightedIndex(0);
+    const frameId = requestAnimationFrame(() => {
+      setHighlightedIndex(0);
+    });
+    return () => cancelAnimationFrame(frameId);
   }, [searchTerm]);
 
   const handleSelect = useCallback(
