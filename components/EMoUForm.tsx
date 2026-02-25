@@ -10,6 +10,7 @@ import {
   MaintainedBy,
   IEEE_SOCIETIES,
   EMOU_OUTCOME_OPTIONS,
+  DOMAIN_OPTIONS,
 } from "@/types";
 import { useAuth } from "@/context/AuthContext";
 import { uploadToCloudinary, deleteFromCloudinary } from "@/lib/cloudinary";
@@ -144,6 +145,7 @@ export default function EMoUForm({
     companyRelationship: initialData?.companyRelationship || 3,
     ieeeSociety: initialData?.ieeeSociety || "Not Applicable",
     emouOutcome: initialData?.emouOutcome || "Not Applicable",
+    domain: initialData?.domain || "Not Applicable",
   });
 
   // IEEE Society search state
@@ -151,12 +153,22 @@ export default function EMoUForm({
   const [isIeeeDropdownOpen, setIsIeeeDropdownOpen] = useState(false);
   const ieeeDropdownRef = useRef<HTMLDivElement>(null);
 
+  // Domain search state
+  const [domainSearchTerm, setDomainSearchTerm] = useState("");
+  const [isDomainDropdownOpen, setIsDomainDropdownOpen] = useState(false);
+  const domainDropdownRef = useRef<HTMLDivElement>(null);
+
   // EMoU Outcome state
   const [customOutcome, setCustomOutcome] = useState("");
 
   // Filter IEEE societies based on search
   const filteredIeeeSocieties = IEEE_SOCIETIES.filter((s) =>
     s.toLowerCase().includes(ieeeSearchTerm.toLowerCase()),
+  );
+
+  // Filter domains based on search
+  const filteredDomains = DOMAIN_OPTIONS.filter((d) =>
+    d.toLowerCase().includes(domainSearchTerm.toLowerCase()),
   );
 
   // Parse emouOutcome string into array
@@ -229,6 +241,7 @@ export default function EMoUForm({
       companyRelationship: 3 as const,
       ieeeSociety: "Not Applicable",
       emouOutcome: "Not Applicable",
+      domain: "Not Applicable",
     }),
     [user?.department],
   );
@@ -1208,6 +1221,90 @@ export default function EMoUForm({
                     Add
                   </button>
                 </div>
+              </div>
+            </div>
+
+            {/* Domain - Searchable Dropdown */}
+            <div className="col-span-2" ref={domainDropdownRef}>
+              <label className="block text-xs font-medium text-[#4b5563] mb-1">
+                Domain
+              </label>
+              <div className="relative">
+                <div
+                  className={`w-full border rounded-md cursor-pointer bg-white ${
+                    isDomainDropdownOpen
+                      ? "border-black ring-2 ring-black"
+                      : "border-[#d1d5db] hover:border-gray-400"
+                  }`}
+                  onClick={() => setIsDomainDropdownOpen(!isDomainDropdownOpen)}
+                >
+                  <div className="flex items-center justify-between px-3 py-2">
+                    <span
+                      className={`text-sm ${
+                        formData.domain && formData.domain !== "Not Applicable"
+                          ? "text-[#1f2937]"
+                          : "text-[#9ca3af]"
+                      }`}
+                    >
+                      {formData.domain || "Select Domain"}
+                    </span>
+                    <svg
+                      className={`h-4 w-4 text-gray-500 transition-transform ${
+                        isDomainDropdownOpen ? "rotate-180" : ""
+                      }`}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 9l-7 7-7-7"
+                      />
+                    </svg>
+                  </div>
+                </div>
+                {isDomainDropdownOpen && (
+                  <div className="absolute z-50 mt-1 w-full bg-white border-2 border-black rounded-md shadow-xl max-h-60 overflow-hidden">
+                    <div className="sticky top-0 bg-white border-b border-gray-200 p-2">
+                      <input
+                        type="text"
+                        value={domainSearchTerm}
+                        onChange={(e) => setDomainSearchTerm(e.target.value)}
+                        placeholder="Search domains..."
+                        className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:border-black focus:ring-1 focus:ring-black"
+                        onClick={(e) => e.stopPropagation()}
+                        autoFocus
+                      />
+                    </div>
+                    <div className="overflow-auto max-h-48">
+                      {filteredDomains.map((domain) => (
+                        <div
+                          key={domain}
+                          className={`px-3 py-2 text-sm cursor-pointer transition-colors ${
+                            formData.domain === domain
+                              ? "bg-blue-50 text-blue-700 font-medium"
+                              : "text-gray-700 hover:bg-gray-100"
+                          }`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setFormData({ ...formData, domain });
+                            setIsDomainDropdownOpen(false);
+                            setDomainSearchTerm("");
+                          }}
+                        >
+                          {domain}
+                        </div>
+                      ))}
+                      {filteredDomains.length === 0 && (
+                        <div className="px-3 py-2 text-sm text-gray-400 italic">
+                          No domains found
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>

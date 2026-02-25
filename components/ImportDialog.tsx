@@ -537,6 +537,9 @@ export default function ImportDialog({ onImport, onClose }: ImportDialogProps) {
         if (record.emouOutcome && String(record.emouOutcome).trim()) {
           emouRecord.emouOutcome = String(record.emouOutcome).trim();
         }
+        if (record.domain && String(record.domain).trim()) {
+          emouRecord.domain = String(record.domain).trim();
+        }
 
         valid.push(emouRecord);
       }

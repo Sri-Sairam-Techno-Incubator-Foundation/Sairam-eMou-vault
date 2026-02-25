@@ -20,6 +20,7 @@ import {
   EMoUStatus,
   IEEE_SOCIETIES,
   EMOU_OUTCOME_OPTIONS,
+  DOMAIN_OPTIONS,
 } from "@/types";
 import { getAllUsers, getEMoUs, updateEMoU, deleteEMoU } from "@/lib/firestore";
 import { uploadToCloudinary, deleteFromCloudinary } from "@/lib/cloudinary";
@@ -212,6 +213,7 @@ function AdminPage() {
             r.createdByName,
             r.ieeeSociety,
             r.emouOutcome,
+            r.domain,
           ];
           return searchableFields.some(
             (field) => field && String(field).toLowerCase().includes(term),
@@ -1092,6 +1094,7 @@ function AdminPage() {
                 <th style={{ minWidth: "200px" }}>Benefits Achieved</th>
                 <th style={{ minWidth: "200px" }}>IEEE Society</th>
                 <th style={{ minWidth: "220px" }}>EMoU Outcome</th>
+                <th style={{ minWidth: "220px" }}>Domain</th>
                 <th style={{ width: "120px" }}>Created By</th>
                 <th
                   style={{
@@ -1626,6 +1629,57 @@ function AdminPage() {
                                   return val.length > 40
                                     ? val.substring(0, 40) + "..."
                                     : val;
+                                })()}
+                              </span>
+                              <FiChevronDown
+                                className="text-blue-600 flex-shrink-0"
+                                size={14}
+                              />
+                            </span>
+                          )}
+                        </td>
+                      );
+                    })()}
+                    {/* Domain - Searchable Dropdown */}
+                    {(() => {
+                      const isEditing =
+                        editingCell?.recordId === record.id &&
+                        editingCell?.field === "domain";
+                      const cellStyle = isEditing
+                        ? { padding: 0, overflow: "visible" as const }
+                        : {};
+                      return (
+                        <td
+                          className={`text-xs relative cursor-pointer hover:bg-blue-50 ${isEditing ? "editing-cell" : ""}`}
+                          onClick={() =>
+                            !isEditing && handleCellClick(record, "domain")
+                          }
+                          style={cellStyle}
+                          title={!isEditing ? "Click to select" : ""}
+                        >
+                          {isEditing ? (
+                            <SearchableCellDropdown
+                              options={DOMAIN_OPTIONS.map((d) => ({
+                                value: d,
+                                label: d,
+                              }))}
+                              value={
+                                (inlineEditData.domain as string) ||
+                                record.domain ||
+                                "Not Applicable"
+                              }
+                              onChange={(value) =>
+                                saveFieldDirectly("domain", value)
+                              }
+                              onClose={cancelInlineEdit}
+                              placeholder="Domain"
+                            />
+                          ) : (
+                            <span className="flex items-center justify-between gap-1 px-1">
+                              <span className="truncate" title={record.domain || "Not Applicable"}>
+                                {(() => {
+                                  const val = record.domain || "Not Applicable";
+                                  return val.length > 30 ? val.substring(0, 30) + "..." : val;
                                 })()}
                               </span>
                               <FiChevronDown

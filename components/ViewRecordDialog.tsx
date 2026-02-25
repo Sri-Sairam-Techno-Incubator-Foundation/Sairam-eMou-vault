@@ -306,6 +306,14 @@ export default function ViewRecordDialog({
                         </div>
                       </div>
                     )}
+                    {record.domain && record.domain !== "Not Applicable" && (
+                      <div>
+                        <span className="text-xs font-medium text-gray-500 block mb-1">
+                          Domain
+                        </span>
+                        <p className="text-gray-700">{record.domain}</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

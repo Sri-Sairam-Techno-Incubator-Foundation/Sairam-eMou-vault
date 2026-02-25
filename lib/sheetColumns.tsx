@@ -259,6 +259,14 @@ export const standardColumns: SheetsTableColumn[] = [
     truncate: 50,
   },
   {
+    key: "domain",
+    label: "Domain",
+    width: "220px",
+    editable: true,
+    type: "text",
+    truncate: 40,
+  },
+  {
     key: "createdByName",
     label: "Created By",
     width: "120px",

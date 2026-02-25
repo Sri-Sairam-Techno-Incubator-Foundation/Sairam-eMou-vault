@@ -83,6 +83,46 @@ export const EMOU_OUTCOME_OPTIONS = [
   "Curriculum Development",
 ] as const;
 
+// Domain options
+export const DOMAIN_OPTIONS = [
+  "Not Applicable",
+  "Advanced Control & Automation",
+  "Applied Electronics",
+  "Applied Instrumentation",
+  "Artificial Intelligence (AI)",
+  "Cloud Computing",
+  "Computer Networks",
+  "Construction Engineering & Management",
+  "Cyber Security",
+  "Data Science",
+  "Electric Vehicles & Intelligent Mobility System",
+  "Energy Engineering",
+  "Engineering Design",
+  "Environmental & Sustainability Engineering",
+  "FinTech & Blockchain",
+  "Green Energy",
+  "Image Processing",
+  "Industrial Engineering",
+  "Industrial Internet of Things (IIoT)",
+  "Machine Learning",
+  "Materials & Manufacturing",
+  "Power Electronics",
+  "Power Systems",
+  "Quantum Computing",
+  "RF & Green Communication",
+  "Robotics & Automation",
+  "Signal Processing & Biomedical Engineering",
+  "Structural Engineering",
+  "Transportation & Urban Planning",
+  "VLSI & Embedded System",
+  "WEB & APP Development",
+  "Wireless Communication",
+  "Cognitive Computing",
+  "Smart & Secure System",
+] as const;
+
+export type DomainOption = typeof DOMAIN_OPTIONS[number];
+
 export type EMoUOutcomeOption = typeof EMOU_OUTCOME_OPTIONS[number];
 
 // eMoU Record interface - matches all fields from README
@@ -121,6 +161,7 @@ export interface EMoURecord {
   companyRelationship?: 1 | 2 | 3 | 4 | 5;
   ieeeSociety?: string; // Selected IEEE society
   emouOutcome?: string; // Comma-separated outcomes (predefined + custom)
+  domain?: string; // Selected domain
   
   // Audit fields
   createdBy: string; // User UID

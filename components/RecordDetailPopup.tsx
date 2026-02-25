@@ -85,6 +85,7 @@ export default function RecordDetailPopup({
       "Benefits Achieved": record.benefitsAchieved || "",
       "IEEE Society": record.ieeeSociety || "",
       "EMoU Outcome": record.emouOutcome || "",
+      Domain: record.domain || "",
       "Document Availability": record.documentAvailability || "Not Available",
       "Created By": record.createdByName || "",
       "Created At":
