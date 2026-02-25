@@ -74,6 +74,7 @@ function AdminPage() {
     field: "hodApprovalDoc" | "signedAgreementDoc";
   } | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
   const [editingCell, setEditingCell] = useState<{
     recordId: string;
     field: string;
@@ -726,6 +727,7 @@ function AdminPage() {
       message: `Are you sure you want to delete user "${user?.displayName || user?.email}"?\n\nThis action cannot be undone.`,
       onConfirm: async () => {
         setConfirmDialog(null);
+        setDeletingUserId(uid);
         try {
           // Get current user's ID token
           const currentAuthUser = auth.currentUser;
@@ -761,6 +763,8 @@ function AdminPage() {
             message: `Failed to delete user: ${err.message}`,
             type: "error",
           });
+        } finally {
+          setDeletingUserId(null);
         }
       },
     });
@@ -2371,12 +2375,20 @@ function AdminPage() {
                             </td>
                             <td>
                               {user.uid !== currentUser?.uid && (
-                                <button
-                                  onClick={() => handleDeleteUser(user.uid)}
-                                  className="text-xs text-red-600 hover:text-red-800"
-                                >
-                                  Delete
-                                </button>
+                                deletingUserId === user.uid ? (
+                                  <div className="flex items-center gap-1 text-xs text-red-500">
+                                    <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-red-300 border-t-red-600"></div>
+                                    <span>Deleting…</span>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => handleDeleteUser(user.uid)}
+                                    className="text-xs text-red-600 hover:text-red-800"
+                                    disabled={deletingUserId !== null}
+                                  >
+                                    Delete
+                                  </button>
+                                )
                               )}
                             </td>
                           </tr>
