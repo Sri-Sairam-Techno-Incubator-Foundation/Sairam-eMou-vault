@@ -184,7 +184,15 @@ export default function Dashboard() {
       | "placement"
       | "internship";
     clickX?: number;
-  }>({ isOpen: false, title: "", records: [], type: "total", clickX: 0 });
+    clickY?: number;
+  }>({
+    isOpen: false,
+    title: "",
+    records: [],
+    type: "total",
+    clickX: 0,
+    clickY: 0,
+  });
   const [graphPopup, setGraphPopup] = useState<{
     isOpen: boolean;
     type: string;
@@ -491,16 +499,16 @@ export default function Dashboard() {
       | "internship" = "total",
     event?: React.MouseEvent,
   ) => {
-    const clickX = event
-      ? event.currentTarget.getBoundingClientRect().left +
-        event.currentTarget.getBoundingClientRect().width / 2
-      : window.innerWidth / 2;
+    const rect = event?.currentTarget.getBoundingClientRect();
+    const clickX = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
+    const clickY = rect ? rect.bottom : 0;
     setPopupData({
       isOpen: true,
       title,
       records: filteredRecords,
       type,
       clickX,
+      clickY,
     });
   };
 
@@ -511,6 +519,7 @@ export default function Dashboard() {
       records: [],
       type: "total",
       clickX: 0,
+      clickY: 0,
     });
   };
 
@@ -1637,6 +1646,7 @@ export default function Dashboard() {
           onClose={closePopup}
           type={popupData.type}
           clickX={popupData.clickX}
+          clickY={popupData.clickY}
         />
       )}
 
