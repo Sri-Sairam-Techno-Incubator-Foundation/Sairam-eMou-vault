@@ -554,7 +554,8 @@ export function SearchableCellDropdown({
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search..."
-              className="w-full pl-7 pr-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:border-black focus:ring-1 focus:ring-black"
+              className="w-full pr-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:border-black focus:ring-1 focus:ring-black"
+              style={{ paddingLeft: "1.75rem" }}
               onClick={(e) => e.stopPropagation()}
             />
           </div>
